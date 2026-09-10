@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Used Car Valuation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --ink: #150F22;
+        --paper: #FAFAFC;
+        --panel: #FFFFFF;
+        --line: #E7E2F2;
+
+        --violet: #7C3AED;
+        --violet-deep: #4C1D95;
+        --violet-soft: #F1EAFE;
+
+        --emerald: #059669;
+        --emerald-soft: #DEF7EC;
+
+        --amber: #D97706;
+        --amber-soft: #FDECD2;
+
+        --rose: #DC2626;
+        --rose-soft: #FBE3E1;
+
+        --font-display: "Sora", sans-serif;
+        --font-body: "Manrope", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        font-family: var(--font-body);
+        background: var(--paper);
+        color: var(--ink);
+        line-height: 1.5;
+    }
+
+    h1, h2, h3 { font-family: var(--font-display); margin: 0; }
+
+    /* ============================= HERO / HEADER ============================= */
+    .hero {
+        position: relative;
+        overflow: hidden;
+        background: var(--ink);
+        color: #EFEAFB;
+        padding: 3.2rem 1.5rem 3.6rem;
+        text-align: center;
+    }
+
+    .hero__dial {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 900px;
+        max-width: 220vw;
+        transform: translate(-50%, -38%);
+        opacity: 0.5;
+        pointer-events: none;
+    }
+
+    .hero__inner { position: relative; z-index: 1; }
+
+    .hero__eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        color: #C7B8F2;
+        background: rgba(124, 58, 237, 0.25);
+        border: 1px solid rgba(167, 139, 250, 0.4);
+        padding: 0.35rem 0.9rem;
+        border-radius: 999px;
+        margin-bottom: 1.1rem;
+    }
+
+    .hero h1 {
+        font-size: clamp(1.9rem, 4vw, 2.7rem);
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.6rem;
+    }
+
+    .hero p {
+        font-size: 1.02rem;
+        color: #C9C0E0;
+        max-width: 46ch;
+        margin: 0 auto;
+    }
+
+    /* ============================= LAYOUT ============================= */
+    .container {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+    }
+
+    .sheet {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: 0 20px 45px -25px rgba(76, 29, 149, 0.35);
+        margin-top: -2.4rem;
+        position: relative;
+        z-index: 2;
+        padding: 2.2rem 2.2rem 2.4rem;
+    }
+
+    .group-title {
+        display: flex;
+        align-items: baseline;
+        gap: 0.6rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--violet-deep);
+        margin: 0 0 1.1rem;
+        padding-bottom: 0.7rem;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .group-title:not(:first-child) { margin-top: 2rem; }
+
+    .group-title span.glyph {
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        background: var(--violet-soft);
+        font-size: 0.95rem;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.1rem 1.4rem;
+    }
+
+    .field { display: flex; flex-direction: column; }
+    .field.full { grid-column: 1 / -1; }
+
+    label {
+        font-weight: 600;
+        font-size: 0.82rem;
+        margin-bottom: 0.4rem;
+        color: #55467E;
+    }
+
+    input, select {
+        font-family: var(--font-body);
+        padding: 0.7rem 0.85rem;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        font-size: 0.95rem;
+        background: #FCFBFF;
+        color: var(--ink);
+        outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    input:focus, select:focus {
+        border-color: var(--violet);
+        box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
+        background: #fff;
+    }
+
+    /* ============================= BUTTON ============================= */
+    .predict-btn {
+        --shine-x: -120%;
+        position: relative;
+        overflow: hidden;
+        width: 100%;
+        margin-top: 1.8rem;
+        padding: 1rem 1.4rem;
+        border: none;
+        border-radius: 12px;
+        background: linear-gradient(120deg, var(--violet-deep), var(--violet) 55%, var(--emerald));
+        color: white;
+        font-family: var(--font-display);
+        font-size: 1.02rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        box-shadow: 0 12px 26px -14px rgba(76, 29, 149, 0.65);
+        transition: transform 0.12s ease, box-shadow 0.2s ease;
+    }
+
+    .predict-btn::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: var(--shine-x);
+        width: 40%;
+        height: 100%;
+        background: linear-gradient(120deg, transparent, rgba(255,255,255,0.35), transparent);
+        transition: left 0.6s ease;
+    }
+
+    .predict-btn:hover::after { left: 120%; }
+    .predict-btn:hover { box-shadow: 0 16px 32px -14px rgba(76, 29, 149, 0.75); }
+    .predict-btn:active { transform: translateY(1px) scale(0.995); }
+
+    .predict-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+    /* ============================= RESULT ============================= */
+    .result {
+        display: none;
+        margin-top: 1.6rem;
+        padding: 2.1rem 2.2rem 2.3rem;
+    }
+
+    .result__head {
+        text-align: center;
+        margin-bottom: 0.4rem;
+    }
+
+    .result__head h2 {
+        font-size: 1.2rem;
+        color: var(--violet-deep);
+    }
+
+    .gauge {
+        max-width: 300px;
+        margin: 0.6rem auto 0.2rem;
+        text-align: center;
+    }
+
+    .gauge svg { width: 100%; }
+
+    .gauge__track { fill: none; stroke: var(--line); stroke-width: 12; }
+    .gauge__zone--under { fill: none; stroke: var(--emerald); stroke-width: 12; opacity: 0.85; }
+    .gauge__zone--fair  { fill: none; stroke: var(--violet); stroke-width: 12; opacity: 0.9; }
+    .gauge__zone--over  { fill: none; stroke: var(--rose); stroke-width: 12; opacity: 0.85; }
+
+    .gauge__needle {
+        stroke: var(--ink);
+        stroke-width: 3;
+        stroke-linecap: round;
+        transform-origin: 120px 128px;
+        transition: transform 0.7s cubic-bezier(.22,1,.36,1);
+    }
+    .gauge__pivot { fill: var(--ink); }
+
+    .price {
+        font-family: var(--font-display);
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: var(--violet-deep);
+        margin: 0.2rem 0 0;
+    }
+
+    .price-caption {
+        font-size: 0.85rem;
+        color: #7A6C9C;
+        margin-bottom: 1.6rem;
+    }
+
+    .chip-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.9rem;
+    }
+
+    .chip {
+        background: #FCFBFF;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--violet);
+        border-radius: 10px;
+        padding: 0.9rem 1rem;
+    }
+
+    .chip.chip--amber { border-left-color: var(--amber); }
+    .chip.chip--status { border-left-color: var(--emerald); }
+
+    .chip h4 {
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: #7A6C9C;
+        margin: 0 0 0.35rem;
+        text-transform: none;
+    }
+
+    .chip p {
+        margin: 0;
+        font-size: 1.15rem;
+        font-weight: 700;
+        font-family: var(--font-display);
+        color: var(--ink);
+    }
+
+    .recommendation {
+        margin-top: 1.4rem;
+        padding: 1rem 1.2rem;
+        border-radius: 10px;
+        background: var(--emerald-soft);
+        color: #065F46;
+        font-weight: 700;
+        text-align: center;
+    }
+
+    .footer {
+        text-align: center;
+        padding: 2.4rem 1.5rem 3rem;
+        color: #7A6C9C;
+        font-size: 0.85rem;
+    }
+
+    @media (max-width: 680px) {
+        .form-grid, .chip-row { grid-template-columns: 1fr; }
+        .sheet, .result { padding: 1.6rem 1.3rem 1.9rem; }
+    }
+</style>
+</head>
+
+<body>
+
+<div class="hero">
+    <svg class="hero__dial" viewBox="0 0 900 500" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <g fill="none" stroke="#A78BFA" stroke-width="1.2">
+            <path d="M 150 420 A 300 300 0 0 1 750 420" />
+            <path d="M 210 420 A 240 240 0 0 1 690 420" opacity="0.55" />
+            <path d="M 270 420 A 180 180 0 0 1 630 420" opacity="0.3" />
+        </g>
+        <g stroke="#34D399" stroke-width="2">
+            <line x1="450" y1="120" x2="450" y2="150" />
+            <line x1="620" y1="165" x2="600" y2="190" />
+            <line x1="280" y1="165" x2="300" y2="190" />
+        </g>
+    </svg>
+    <div class="hero__inner">
+        <span class="hero__eyebrow">MCA Mini Project &nbsp;&middot;&nbsp; Machine Learning</span>
+        <h1>Smart Used Car Valuation</h1>
+        <p>Enter your car's details and an XGBoost model trained on real resale data estimates what it's actually worth.</p>
+    </div>
+</div>
+
+<div class="container">
+
+    <div class="sheet">
+
+        <form id="predictionForm">
+
+            <h2 class="group-title"><span class="glyph">🚘</span> Car details</h2>
+            <div class="form-grid">
+
+                <div class="field">
+                    <label>Car name</label>
+                    <input type="text" name="car_name" placeholder="e.g. maruti swift" required>
+                </div>
+
+                <div class="field">
+                    <label>Make / brand</label>
+                    <input type="text" name="make" placeholder="e.g. maruti" required>
+                </div>
+
+                <div class="field">
+                    <label>Model</label>
+                    <input type="text" name="model" placeholder="e.g. swift" required>
+                </div>
+
+                <div class="field">
+                    <label>Manufacturing year</label>
+                    <input type="number" name="yr_mfr" min="1996" max="2026" placeholder="2020" required>
+                </div>
+
+                <div class="field">
+                    <label>Kilometers driven</label>
+                    <input type="number" name="kms_run" min="0" placeholder="50000" required>
+                </div>
+
+                <div class="field">
+                    <label>Fuel type</label>
+                    <select name="fuel_type" required>
+                        <option value="">Select fuel</option>
+                        <option value="petrol">Petrol</option>
+                        <option value="diesel">Diesel</option>
+                        <option value="cng">CNG</option>
+                        <option value="electric">Electric</option>
+                        <option value="lpg">LPG</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>Transmission</label>
+                    <select name="transmission" required>
+                        <option value="">Select transmission</option>
+                        <option value="manual">Manual</option>
+                        <option value="automatic">Automatic</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>Body type</label>
+                    <select name="body_type">
+                        <option value="hatchback">Hatchback</option>
+                        <option value="sedan">Sedan</option>
+                        <option value="suv">SUV</option>
+                        <option value="muv">MUV</option>
+                        <option value="coupe">Coupe</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <h2 class="group-title"><span class="glyph">📍</span> Ownership &amp; listing</h2>
+            <div class="form-grid">
+
+                <div class="field">
+                    <label>Total owners</label>
+                    <select name="total_owners" required>
+                        <option value="1">1st owner</option>
+                        <option value="2">2nd owner</option>
+                        <option value="3">3rd owner</option>
+                        <option value="4">4+ owners</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>City</label>
+                    <input type="text" name="city" placeholder="e.g. mumbai" required>
+                </div>
+
+                <div class="field">
+                    <label>Original price (₹)</label>
+                    <input type="number" name="original_price" min="0" placeholder="700000">
+                </div>
+
+                <div class="field">
+                    <label>Car rating</label>
+                    <select name="car_rating">
+                        <option value="great">Great</option>
+                        <option value="good">Good</option>
+                        <option value="fair">Fair</option>
+                        <option value="overpriced">Overpriced</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <button type="submit" class="predict-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 12 15.5 8.5"/><path d="M12 4v1"/><path d="M20 12h-1"/></svg>
+                Predict car price
+            </button>
+
+        </form>
+
+    </div>
+
+    <div class="sheet result" id="result">
+
+        <div class="result__head">
+            <h2>Estimated market value</h2>
+        </div>
+
+        <div class="gauge">
+            <svg viewBox="0 0 240 140">
+                <path class="gauge__track" d="M 20 128 A 100 100 0 0 1 220 128" />
+                <path class="gauge__zone--under" d="M 20 128 A 100 100 0 0 1 82 40" />
+                <path class="gauge__zone--fair"  d="M 82 40 A 100 100 0 0 1 158 40" />
+                <path class="gauge__zone--over"  d="M 158 40 A 100 100 0 0 1 220 128" />
+                <line class="gauge__needle" id="gaugeNeedle" x1="120" y1="128" x2="120" y2="40" />
+                <circle cx="120" cy="128" r="6" class="gauge__pivot" />
+            </svg>
+        </div>
+
+        <div class="price" id="predictedPrice">₹0</div>
+        <p class="price-caption">predicted market price</p>
+
+        <div class="chip-row">
+            <div class="chip">
+                <h4>Fair price</h4>
+                <p id="fairPrice">₹0</p>
+            </div>
+            <div class="chip chip--amber">
+                <h4>Depreciation</h4>
+                <p id="depreciation">0%</p>
+            </div>
+            <div class="chip chip--status">
+                <h4>Valuation status</h4>
+                <p id="status">Fair</p>
+            </div>
+        </div>
+
+        <div class="recommendation" id="recommendation">
+            👍 Good deal
+        </div>
+
+    </div>
+
+</div>
+
+<div class="footer">
+    Smart Used Car Price Prediction &amp; Valuation System<br>
+    MCA Mini Project &middot; Machine Learning
+</div>
+
+<script>
+
+function setNeedle(ratio) {
+    // ratio = predicted / fair (or 1 if unknown) -> maps to the semicircle.
+    const min = 0.6, max = 1.4;
+    const clamped = Math.min(Math.max(ratio, min), max);
+    const angle = 180 - ((clamped - min) / (max - min)) * 180;
+    const rotation = 90 - angle;
+    const needle = document.getElementById("gaugeNeedle");
+    if (needle) needle.style.transform = `rotate(${rotation}deg)`;
+}
+
+document.getElementById("predictionForm").addEventListener("submit", async function(e) {
+
+    e.preventDefault();
+
+    const formData = new FormData(this);
+
+    const data = {};
+
+    formData.forEach((value, key) => {
+        data[key] = value;
+    });
+
+    try {
+
+        const response = await fetch("/predict", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert(result.error || "Prediction failed");
+            return;
+        }
+
+        document.getElementById("result").style.display = "block";
+
+        document.getElementById("predictedPrice").innerText =
+            "₹" + Number(result.predicted_price).toLocaleString("en-IN");
+
+        if (result.fair_price) {
+            document.getElementById("fairPrice").innerText =
+                "₹" + Number(result.fair_price).toLocaleString("en-IN");
+        }
+
+        if (result.depreciation !== undefined) {
+            document.getElementById("depreciation").innerText =
+                Number(result.depreciation).toFixed(1) + "%";
+        }
+
+        if (result.status) {
+            document.getElementById("status").innerText = result.status;
+        }
+
+        if (result.recommendation) {
+            document.getElementById("recommendation").innerText =
+                result.recommendation;
+        }
+
+        const ratio = result.fair_price
+            ? Number(result.predicted_price) / Number(result.fair_price)
+            : 1;
+        setNeedle(ratio);
+
+        document.getElementById("result").scrollIntoView({
+            behavior: "smooth"
+        });
+
+    } catch (error) {
+
+        alert("Unable to connect with Flask server.");
+
+        console.error(error);
+    }
+
+});
+
+</script>
+
+</body>
+</html>
