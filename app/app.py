@@ -47,6 +47,11 @@ feature_columns = list(joblib.load(FEATURE_COLUMNS_PATH))
 print("Model loaded successfully!")
 print("Expected features:", len(feature_columns))
 
+# Model's own reported error from your notebook - used to draw a
+# confidence / uncertainty band around the predicted price.
+# Update this if you retrain and get a different MAE.
+MODEL_MAE = 40996.51
+
 
 # ============================================================
 # LOAD TRAINING DATA
@@ -55,6 +60,64 @@ print("Expected features:", len(feature_columns))
 df_train = pd.read_csv(DATA_PATH)
 
 print("Training data loaded:", df_train.shape)
+
+# Which column in the raw CSV holds the actual sale price - needed for
+# the "similar cars" lookup. Adjust this list if your CSV uses a
+# different name for the target variable.
+TARGET_COLUMN = None
+for candidate in ["sale_price", "price", "selling_price", "original_price"]:
+    if candidate in df_train.columns:
+        TARGET_COLUMN = candidate
+        break
+
+
+# ============================================================
+# FEATURE IMPORTANCE (computed once at startup)
+# ============================================================
+
+def humanize_feature_name(name):
+    """Turns a raw trained feature name into something readable for
+    the chart, e.g. 'fuel_type_diesel' -> 'Fuel Type: Diesel',
+    'model_freq' -> 'Model (popularity)'."""
+
+    if name.endswith("_freq"):
+        base = name[:-5].replace("_", " ")
+        return f"{base.title()} (popularity)"
+
+    prefixes = [
+        "fuel_type", "city", "body_type", "transmission", "source",
+        "make", "car_availability", "car_rating", "fitness_certificate",
+    ]
+    for prefix in prefixes:
+        if name.startswith(prefix + "_"):
+            value = name[len(prefix) + 1:]
+            return f"{prefix.replace('_', ' ').title()}: {value.title()}"
+
+    return name.replace("_", " ").title()
+
+
+def build_feature_importance():
+    try:
+        importances = model.feature_importances_
+    except AttributeError:
+        return []
+
+    pairs = list(zip(feature_columns, importances))
+    pairs.sort(key=lambda p: p[1], reverse=True)
+
+    top = pairs[:8]
+    total = sum(v for _, v in pairs) or 1.0
+
+    return [
+        {
+            "feature": humanize_feature_name(name),
+            "importance": round(float(value) / float(total) * 100, 2),
+        }
+        for name, value in top
+    ]
+
+
+FEATURE_IMPORTANCE = build_feature_importance()
 
 
 # ============================================================
@@ -184,6 +247,144 @@ def set_categorical_feature(row, prefix, value):
             return
 
 
+def build_feature_row(inputs):
+    """
+    Builds the exact-column, exact-order row the model expects, from a
+    dict of parsed inputs. Shared by /predict and the price-trend
+    calculation so both use identical logic - avoids duplicating (and
+    accidentally desyncing) the encoding rules in two places.
+    """
+
+    row = pd.Series(0.0, index=feature_columns, dtype="float64")
+
+    frequency_values = {
+        "car_name": f"{inputs['make']} {inputs['model_name']}".strip(),
+        "variant": inputs["variant"],
+        "registered_city": inputs["registered_city"],
+        "registered_state": inputs["registered_state"],
+        "rto": inputs["rto"],
+        "model": inputs["model_name"],
+    }
+    for col, value in frequency_values.items():
+        feature_name = f"{col}_freq"
+        if feature_name in feature_columns:
+            freq_map = frequency_maps.get(col, {})
+            row[feature_name] = freq_map.get(clean_text(value), 0)
+
+    categorical_values = {
+        "fuel_type": inputs["fuel_type"],
+        "city": inputs["city"],
+        "body_type": inputs["body_type"],
+        "transmission": inputs["transmission"],
+        "source": inputs.get("source", ""),
+        "make": inputs["make"],
+        "car_availability": inputs.get("car_availability", ""),
+        "car_rating": inputs["car_rating"],
+    }
+    for col, value in categorical_values.items():
+        set_categorical_feature(row, col, value)
+
+    # fitness_certificate is boolean-flavoured in the training data
+    # (its two raw values are True/False), so get_dummies names its
+    # column "fitness_certificate_True" / "fitness_certificate_False".
+    fitness_certificate = inputs.get("fitness_certificate", "")
+    fitness_bool_str = "True" if fitness_certificate in ("yes", "true", "1") else "False"
+    fitness_column = f"fitness_certificate_{fitness_bool_str}"
+    if fitness_column in feature_columns:
+        row[fitness_column] = 1
+
+    numeric_values = {
+        "yr_mfr": inputs["manufacturing_year"],
+        "kms_run": inputs["kms_driven"],
+        "total_owners": inputs["total_owners"],
+        "original_price": inputs["original_price"],
+        "is_hot": inputs.get("is_hot", 0),
+        "reserved": inputs.get("reserved", 0),
+        "warranty_avail": inputs.get("warranty_avail", 0),
+        "assured_buy": inputs.get("assured_buy", 0),
+        "times_viewed": inputs.get("times_viewed", 0),
+    }
+    for feature_name, value in numeric_values.items():
+        if feature_name in feature_columns:
+            row[feature_name] = value
+
+    # NOTE: your notebook hardcoded 2026 as "current year" when this
+    # feature was engineered — using datetime.now().year is fine while
+    # it's still 2026, but if you retrain later or run this next year,
+    # switch back to a fixed year to stay consistent with training.
+    if "car_age" in feature_columns and inputs["manufacturing_year"]:
+        current_year = datetime.now().year
+        row["car_age"] = max(current_year - int(inputs["manufacturing_year"]), 0)
+
+    return row
+
+
+def predict_price(row):
+    X_input = pd.DataFrame([row], columns=feature_columns)
+    price = float(model.predict(X_input)[0])
+    return max(price, 0), X_input
+
+
+def find_similar_cars(inputs, limit=5):
+    """Looks up real listings from the training CSV that are close to
+    the entered car - same make (if enough exist), similar year and km."""
+
+    if df_train.empty or TARGET_COLUMN is None:
+        return []
+
+    candidates = df_train.copy()
+
+    make = inputs["make"]
+    if make and "make" in candidates.columns:
+        same_make = candidates[candidates["make"].astype(str).str.strip().str.lower() == make]
+        if len(same_make) >= 3:
+            candidates = same_make
+
+    if "yr_mfr" in candidates.columns and inputs["manufacturing_year"]:
+        candidates = candidates.assign(
+            _year_diff=(candidates["yr_mfr"] - inputs["manufacturing_year"]).abs()
+        )
+    else:
+        candidates = candidates.assign(_year_diff=0)
+
+    if "kms_run" in candidates.columns and inputs["kms_driven"]:
+        candidates = candidates.assign(
+            _km_diff=(candidates["kms_run"] - inputs["kms_driven"]).abs()
+        )
+    else:
+        candidates = candidates.assign(_km_diff=0)
+
+    candidates["_score"] = candidates["_year_diff"] * 50000 + candidates["_km_diff"] / 10
+    candidates = candidates.sort_values("_score").head(limit)
+
+    results = []
+    for _, r in candidates.iterrows():
+        results.append({
+            "make": str(r.get("make", "")).title(),
+            "model": str(r.get("model", "")).title(),
+            "year": int(r["yr_mfr"]) if "yr_mfr" in r and pd.notna(r["yr_mfr"]) else None,
+            "kms": int(r["kms_run"]) if "kms_run" in r and pd.notna(r["kms_run"]) else None,
+            "price": round(float(r[TARGET_COLUMN]), 2) if pd.notna(r[TARGET_COLUMN]) else None,
+        })
+    return results
+
+
+def build_price_trend(inputs, span=8):
+    """Holds everything fixed except manufacturing year, and predicts
+    the price at each year in the last `span` years - shows the
+    depreciation curve for this exact car."""
+
+    current_year = datetime.now().year
+    trend = []
+    for yr in range(current_year - span + 1, current_year + 1):
+        trial_inputs = dict(inputs)
+        trial_inputs["manufacturing_year"] = yr
+        row = build_feature_row(trial_inputs)
+        price, _ = predict_price(row)
+        trend.append({"year": yr, "price": round(price, 2)})
+    return trend
+
+
 # ============================================================
 # HOME PAGE
 # ============================================================
@@ -212,199 +413,47 @@ def predict():
         # older/newer form use either name safely.
         # ----------------------------------------------------
 
-        make = clean_text(form.get("make"))
-
-        model_name = clean_text(form.get("model"))
-
-        variant = clean_text(form.get("variant"))
-
-        manufacturing_year = to_float(
-            form.get("yr_mfr", form.get("manufacturing_year"))
-        )
-
-        kms_driven = to_float(
-            form.get("kms_run", form.get("kms_driven"))
-        )
-
-        fuel_type = clean_text(form.get("fuel_type"))
-
-        transmission = clean_text(form.get("transmission"))
-
-        body_type = clean_text(form.get("body_type"))
-
-        total_owners = to_float(form.get("total_owners"))
-
-        city = clean_text(form.get("city"))
-
-        registered_city = clean_text(form.get("registered_city"))
-
-        registered_state = clean_text(form.get("registered_state"))
-
-        rto = clean_text(form.get("rto"))
-
-        car_rating = clean_text(form.get("car_rating"))
-
-        original_price = to_float(form.get("original_price"))
-
-        car_availability = clean_text(form.get("car_availability"))
-
-        source = clean_text(form.get("source"))
-
-        fitness_certificate = clean_text(form.get("fitness_certificate"))
-
-        assured_buy = to_bool(form.get("assured_buy"))
-
-        is_hot = to_bool(form.get("is_hot"))
-
-        reserved = to_bool(form.get("reserved"))
-
-        warranty_avail = to_bool(
-            form.get("warranty_avail", form.get("warranty_available"))
-        )
-
-        times_viewed = to_float(form.get("times_viewed"))
+        inputs = {
+            "make": clean_text(form.get("make")),
+            "model_name": clean_text(form.get("model")),
+            "variant": clean_text(form.get("variant")),
+            "manufacturing_year": to_float(form.get("yr_mfr", form.get("manufacturing_year"))),
+            "kms_driven": to_float(form.get("kms_run", form.get("kms_driven"))),
+            "fuel_type": clean_text(form.get("fuel_type")),
+            "transmission": clean_text(form.get("transmission")),
+            "body_type": clean_text(form.get("body_type")),
+            "total_owners": to_float(form.get("total_owners")),
+            "city": clean_text(form.get("city")),
+            "registered_city": clean_text(form.get("registered_city")),
+            "registered_state": clean_text(form.get("registered_state")),
+            "rto": clean_text(form.get("rto")),
+            "car_rating": clean_text(form.get("car_rating")),
+            "original_price": to_float(form.get("original_price")),
+            "car_availability": clean_text(form.get("car_availability")),
+            "source": clean_text(form.get("source")),
+            "fitness_certificate": clean_text(form.get("fitness_certificate")),
+            "assured_buy": to_bool(form.get("assured_buy")),
+            "is_hot": to_bool(form.get("is_hot")),
+            "reserved": to_bool(form.get("reserved")),
+            "warranty_avail": to_bool(form.get("warranty_avail", form.get("warranty_available"))),
+            "times_viewed": to_float(form.get("times_viewed")),
+        }
 
         print("\nParsed input:", {
-            "make": make, "model": model_name, "yr_mfr": manufacturing_year,
-            "kms_run": kms_driven, "fuel_type": fuel_type,
-            "transmission": transmission, "body_type": body_type,
-            "total_owners": total_owners, "city": city,
-            "original_price": original_price, "car_rating": car_rating,
+            "make": inputs["make"], "model": inputs["model_name"],
+            "yr_mfr": inputs["manufacturing_year"], "kms_run": inputs["kms_driven"],
+            "fuel_type": inputs["fuel_type"], "transmission": inputs["transmission"],
+            "body_type": inputs["body_type"], "total_owners": inputs["total_owners"],
+            "city": inputs["city"], "original_price": inputs["original_price"],
+            "car_rating": inputs["car_rating"],
         })
 
         # ----------------------------------------------------
-        # CREATE EMPTY ROW
+        # BUILD FEATURE ROW + PREDICT
         # ----------------------------------------------------
 
-        row = pd.Series(
-            0.0,
-            index=feature_columns,
-            dtype="float64"
-        )
-
-        # ----------------------------------------------------
-        # FREQUENCY ENCODING
-        # Trained feature name is "<col>_freq", not the bare name.
-        # ----------------------------------------------------
-
-        frequency_values = {
-
-            "car_name": f"{make} {model_name}".strip(),
-
-            "variant": variant,
-
-            "registered_city": registered_city,
-
-            "registered_state": registered_state,
-
-            "rto": rto,
-
-            "model": model_name
-        }
-
-        for col, value in frequency_values.items():
-
-            feature_name = f"{col}_freq"
-
-            if feature_name in feature_columns:
-
-                freq_map = frequency_maps.get(col, {})
-
-                row[feature_name] = freq_map.get(clean_text(value), 0)
-
-        # ----------------------------------------------------
-        # ONE-HOT ENCODING
-        # ----------------------------------------------------
-
-        categorical_values = {
-
-            "fuel_type": fuel_type,
-
-            "city": city,
-
-            "body_type": body_type,
-
-            "transmission": transmission,
-
-            "source": source,
-
-            "make": make,
-
-            "car_availability": car_availability,
-
-            "car_rating": car_rating,
-
-        }
-
-        for col, value in categorical_values.items():
-
-            set_categorical_feature(row, col, value)
-
-        # fitness_certificate is boolean-flavoured in the training data
-        # (its two raw values are True/False), so get_dummies names its
-        # column "fitness_certificate_True" / "fitness_certificate_False".
-        fitness_bool_str = "True" if fitness_certificate in ("yes", "true", "1") else "False"
-        fitness_column = f"fitness_certificate_{fitness_bool_str}"
-        if fitness_column in feature_columns:
-            row[fitness_column] = 1
-
-        # ----------------------------------------------------
-        # NUMERIC FEATURES (trained column name -> value)
-        # ----------------------------------------------------
-
-        numeric_values = {
-
-            "yr_mfr": manufacturing_year,
-
-            "kms_run": kms_driven,
-
-            "total_owners": total_owners,
-
-            "original_price": original_price,
-
-            "is_hot": is_hot,
-
-            "reserved": reserved,
-
-            "warranty_avail": warranty_avail,
-
-            "assured_buy": assured_buy,
-
-            "times_viewed": times_viewed
-        }
-
-        for feature_name, value in numeric_values.items():
-
-            if feature_name in feature_columns:
-
-                row[feature_name] = value
-
-        # ----------------------------------------------------
-        # CAR AGE
-        # NOTE: your notebook hardcoded 2026 as "current year" when
-        # this feature was engineered — using datetime.now().year is
-        # fine while it's still 2026, but if you retrain later or run
-        # this next year, switch back to a fixed year to stay
-        # consistent with how the model was actually trained.
-        # ----------------------------------------------------
-
-        if "car_age" in feature_columns and manufacturing_year:
-
-            current_year = datetime.now().year
-
-            row["car_age"] = max(
-                current_year - int(manufacturing_year),
-                0
-            )
-
-        # ----------------------------------------------------
-        # FINAL DATAFRAME
-        # ----------------------------------------------------
-
-        X_input = pd.DataFrame(
-            [row],
-            columns=feature_columns
-        )
+        row = build_feature_row(inputs)
+        predicted_price, X_input = predict_price(row)
 
         # Sanity check while you're debugging: how many features
         # actually ended up non-zero? If this number stays tiny no
@@ -413,14 +462,6 @@ def predict():
         nonzero = int((X_input.iloc[0] != 0).sum())
         print("Prediction input created")
         print("Feature count:", X_input.shape[1], "| non-zero features:", nonzero)
-
-        # ----------------------------------------------------
-        # PREDICTION
-        # ----------------------------------------------------
-
-        predicted_price = float(model.predict(X_input)[0])
-
-        predicted_price = max(predicted_price, 0)
 
         # ----------------------------------------------------
         # FAIR PRICE RANGE
@@ -433,6 +474,8 @@ def predict():
         # ----------------------------------------------------
         # VALUATION STATUS
         # ----------------------------------------------------
+
+        original_price = inputs["original_price"]
 
         if original_price and original_price < predicted_price * 0.90:
 
@@ -463,6 +506,11 @@ def predict():
             "fair_price_low": round(fair_low, 2),
             "fair_price_high": round(fair_high, 2),
 
+            # Confidence / uncertainty band, based on the model's own MAE.
+            "confidence_low": round(max(predicted_price - MODEL_MAE, 0), 2),
+            "confidence_high": round(predicted_price + MODEL_MAE, 2),
+            "model_mae": MODEL_MAE,
+
             "depreciation": round(
                 (1 - (predicted_price / original_price)) * 100, 1
             ) if original_price else 0,
@@ -472,14 +520,18 @@ def predict():
 
             "recommendation": recommendation,
 
+            "feature_importance": FEATURE_IMPORTANCE,
+            "similar_cars": find_similar_cars(inputs),
+            "price_trend": build_price_trend(inputs),
+
             "summary": {
-                "make": make,
-                "model": model_name,
-                "variant": variant,
-                "manufacturing_year": manufacturing_year,
-                "kms_driven": kms_driven,
-                "total_owners": total_owners,
-                "city": city,
+                "make": inputs["make"],
+                "model": inputs["model_name"],
+                "variant": inputs["variant"],
+                "manufacturing_year": inputs["manufacturing_year"],
+                "kms_driven": inputs["kms_driven"],
+                "total_owners": inputs["total_owners"],
+                "city": inputs["city"],
                 "original_price": original_price
             }
         }
