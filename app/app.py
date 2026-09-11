@@ -62,8 +62,8 @@ df_train = pd.read_csv(DATA_PATH)
 print("Training data loaded:", df_train.shape)
 
 # Which column in the raw CSV holds the actual sale price - needed for
-# the "similar cars" lookup. Adjust this list if your CSV uses a
-# different name for the target variable.
+# the "similar cars" lookup. Your notebook's target column is
+# "sale_price" - keeping the fallback list in case the CSV changes.
 TARGET_COLUMN = None
 for candidate in ["sale_price", "price", "selling_price", "original_price"]:
     if candidate in df_train.columns:
@@ -298,6 +298,14 @@ def build_feature_row(inputs):
         "kms_run": inputs["kms_driven"],
         "total_owners": inputs["total_owners"],
         "original_price": inputs["original_price"],
+
+        # BUG FIX: the notebook engineered this indicator column
+        # (df_clean["original_price_missing"] = original_price.isnull())
+        # and it IS one of the 76 trained features. It was missing
+        # from this row entirely before - always defaulting to 0
+        # regardless of whether original_price was actually supplied.
+        "original_price_missing": 0 if inputs["original_price"] else 1,
+
         "is_hot": inputs.get("is_hot", 0),
         "reserved": inputs.get("reserved", 0),
         "warranty_avail": inputs.get("warranty_avail", 0),
