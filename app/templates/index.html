@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
     :root {
         --ink: #150F22;
@@ -307,6 +310,26 @@
         text-align: center;
     }
 
+    table.similar-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    table.similar-table th {
+        text-align: left;
+        padding: 0.55rem 0.5rem;
+        border-bottom: 1px solid var(--line);
+        color: #55467E;
+        font-weight: 700;
+    }
+    table.similar-table td {
+        padding: 0.55rem 0.5rem;
+        border-bottom: 1px solid #F0EDF9;
+    }
+
+    .emi-btn-wrap { display: flex; align-items: flex-end; }
+    .emi-btn-wrap .predict-btn { margin-top: 0; }
+
     .footer {
         text-align: center;
         padding: 2.4rem 1.5rem 3rem;
@@ -490,9 +513,68 @@
             </div>
         </div>
 
+        <div class="chip-row" style="margin-top:0.9rem;">
+            <div class="chip" style="grid-column: 1 / -1;">
+                <h4>Confidence range</h4>
+                <p id="confidenceRange">₹0 – ₹0</p>
+            </div>
+        </div>
+
         <div class="recommendation" id="recommendation">
             👍 Good deal
         </div>
+
+        <!-- ======= FEATURE IMPORTANCE ======= -->
+        <h2 class="group-title"><span class="glyph">📊</span> What drove this price</h2>
+        <canvas id="importanceChart" height="220"></canvas>
+
+        <!-- ======= SIMILAR CARS ======= -->
+        <h2 class="group-title"><span class="glyph">🔎</span> Similar cars in the data</h2>
+        <table class="similar-table">
+            <thead>
+                <tr>
+                    <th>Car</th>
+                    <th>Year</th>
+                    <th>KM driven</th>
+                    <th>Price</th>
+                </tr>
+            </thead>
+            <tbody id="similarCarsBody"></tbody>
+        </table>
+
+        <!-- ======= PRICE TREND ======= -->
+        <h2 class="group-title"><span class="glyph">📈</span> Price by manufacturing year</h2>
+        <canvas id="trendChart" height="220"></canvas>
+
+        <!-- ======= EMI CALCULATOR ======= -->
+        <h2 class="group-title"><span class="glyph">💳</span> EMI calculator</h2>
+        <div class="form-grid">
+            <div class="field">
+                <label>Down payment (₹)</label>
+                <input type="number" id="emiDownPayment" value="100000" min="0">
+            </div>
+            <div class="field">
+                <label>Interest rate (% per year)</label>
+                <input type="number" id="emiRate" value="9.5" step="0.1" min="0">
+            </div>
+            <div class="field">
+                <label>Tenure (months)</label>
+                <input type="number" id="emiTenure" value="36" min="6" max="84">
+            </div>
+            <div class="field emi-btn-wrap">
+                <button type="button" class="predict-btn" id="calcEmiBtn">Calculate EMI</button>
+            </div>
+        </div>
+        <div class="chip-row" style="margin-top:1rem;">
+            <div class="chip"><h4>Loan amount</h4><p id="emiLoanAmount">₹0</p></div>
+            <div class="chip chip--amber"><h4>Monthly EMI</h4><p id="emiMonthly">₹0</p></div>
+            <div class="chip chip--status"><h4>Total interest</h4><p id="emiInterest">₹0</p></div>
+        </div>
+
+        <!-- ======= PDF DOWNLOAD ======= -->
+        <button type="button" class="predict-btn" id="downloadPdfBtn" style="margin-top:2rem;">
+            ⬇ Download valuation report (PDF)
+        </button>
 
     </div>
 
@@ -568,6 +650,42 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
                 result.recommendation;
         }
 
+        // ---- Confidence range ----
+        if (result.confidence_low !== undefined) {
+            document.getElementById("confidenceRange").innerText =
+                "₹" + Number(result.confidence_low).toLocaleString("en-IN") +
+                " – ₹" + Number(result.confidence_high).toLocaleString("en-IN");
+        }
+
+        // ---- Feature importance chart ----
+        if (result.feature_importance && result.feature_importance.length) {
+            renderImportanceChart(result.feature_importance);
+        }
+
+        // ---- Similar cars table ----
+        if (result.similar_cars) {
+            const tbody = document.getElementById("similarCarsBody");
+            tbody.innerHTML = "";
+            result.similar_cars.forEach(car => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${car.make} ${car.model}</td>
+                    <td>${car.year ?? "—"}</td>
+                    <td>${car.kms ? Number(car.kms).toLocaleString("en-IN") : "—"}</td>
+                    <td style="font-weight:700;">₹${car.price ? Number(car.price).toLocaleString("en-IN") : "—"}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // ---- Price trend chart ----
+        if (result.price_trend && result.price_trend.length) {
+            renderTrendChart(result.price_trend);
+        }
+
+        // ---- Store predicted price for EMI calculator ----
+        window.__lastPredictedPrice = Number(result.predicted_price);
+
         const ratio = result.fair_price
             ? Number(result.predicted_price) / Number(result.fair_price)
             : 1;
@@ -584,6 +702,98 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
         console.error(error);
     }
 
+});
+
+let importanceChartInstance = null;
+let trendChartInstance = null;
+
+function renderImportanceChart(data) {
+    const ctx = document.getElementById("importanceChart");
+    if (importanceChartInstance) importanceChartInstance.destroy();
+    importanceChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: data.map(d => d.feature),
+            datasets: [{
+                label: "Importance (%)",
+                data: data.map(d => d.importance),
+                backgroundColor: "#7C3AED",
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            indexAxis: "y",
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true } }
+        }
+    });
+}
+
+function renderTrendChart(data) {
+    const ctx = document.getElementById("trendChart");
+    if (trendChartInstance) trendChartInstance.destroy();
+    trendChartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: data.map(d => d.year),
+            datasets: [{
+                label: "Predicted price (₹)",
+                data: data.map(d => d.price),
+                borderColor: "#059669",
+                backgroundColor: "rgba(5,150,105,0.12)",
+                fill: true,
+                tension: 0.3,
+            }]
+        },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: false } }
+        }
+    });
+}
+
+// ---- EMI calculator ----
+document.getElementById("calcEmiBtn").addEventListener("click", () => {
+    const price = window.__lastPredictedPrice || 0;
+    const downPayment = Number(document.getElementById("emiDownPayment").value) || 0;
+    const annualRate = Number(document.getElementById("emiRate").value) || 0;
+    const months = Number(document.getElementById("emiTenure").value) || 1;
+
+    const loanAmount = Math.max(price - downPayment, 0);
+    const monthlyRate = annualRate / 12 / 100;
+
+    let emi;
+    if (monthlyRate === 0) {
+        emi = loanAmount / months;
+    } else {
+        emi = (loanAmount * monthlyRate * Math.pow(1 + monthlyRate, months)) /
+              (Math.pow(1 + monthlyRate, months) - 1);
+    }
+
+    const totalPayment = emi * months;
+    const totalInterest = totalPayment - loanAmount;
+
+    document.getElementById("emiLoanAmount").innerText = "₹" + Math.round(loanAmount).toLocaleString("en-IN");
+    document.getElementById("emiMonthly").innerText = "₹" + Math.round(emi).toLocaleString("en-IN");
+    document.getElementById("emiInterest").innerText = "₹" + Math.round(totalInterest).toLocaleString("en-IN");
+});
+
+// ---- PDF download ----
+document.getElementById("downloadPdfBtn").addEventListener("click", async () => {
+    const resultEl = document.getElementById("result");
+    const canvas = await html2canvas(resultEl, { scale: 2 });
+    const imgData = canvas.toDataURL("image/png");
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const imgWidth = pageWidth - 20;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    pdf.setFontSize(16);
+    pdf.text("Smart Used Car Valuation Report", 10, 12);
+    pdf.addImage(imgData, "PNG", 10, 18, imgWidth, imgHeight);
+    pdf.save("car-valuation-report.pdf");
 });
 
 </script>
