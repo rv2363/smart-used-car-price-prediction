@@ -62,13 +62,66 @@ df_train = pd.read_csv(DATA_PATH)
 print("Training data loaded:", df_train.shape)
 
 # Which column in the raw CSV holds the actual sale price - needed for
-# the "similar cars" lookup. Your notebook's target column is
-# "sale_price" - keeping the fallback list in case the CSV changes.
+# the "similar cars" lookup. Adjust this list if your CSV uses a
+# different name for the target variable.
 TARGET_COLUMN = None
 for candidate in ["sale_price", "price", "selling_price", "original_price"]:
     if candidate in df_train.columns:
         TARGET_COLUMN = candidate
         break
+
+
+# ============================================================
+# CATEGORICAL FEATURE MAPPING (built once at startup)
+# ------------------------------------------------------------
+# The old approach guessed how pd.get_dummies() named each one-hot
+# column (value, value.title(), value.upper(), value_with_underscores)
+# and used whichever guess happened to exist in feature_columns. If the
+# real training data used a casing/spacing convention that didn't match
+# any of those guesses, the feature silently stayed at 0 - no error,
+# just a categorical input the model never actually saw.
+#
+# This was the main cause of predictions barely reacting to make,
+# fuel type, body type, transmission, city, rating, etc.: those inputs
+# were mostly landing on nothing, leaving the model to lean almost
+# entirely on the numeric features (especially original_price).
+#
+# Fix: look at the ACTUAL raw values that existed in the training CSV
+# for each categorical column, and match them directly against
+# feature_columns. This guarantees a correct match regardless of the
+# casing/spacing convention used when the model was trained.
+# ============================================================
+
+CATEGORICAL_RAW_COLUMNS = [
+    "fuel_type", "city", "body_type", "transmission",
+    "source", "make", "car_availability", "car_rating",
+]
+
+
+def build_category_maps():
+    maps = {}
+
+    for col in CATEGORICAL_RAW_COLUMNS:
+        if col not in df_train.columns:
+            continue
+
+        prefix = col + "_"
+        # every one-hot column in the trained model that belongs to this field
+        candidate_columns = [c for c in feature_columns if c.startswith(prefix)]
+
+        value_map = {}
+        for raw in df_train[col].dropna().astype(str).unique():
+            raw_clean = raw.strip()
+            candidate = f"{prefix}{raw_clean}"
+            if candidate in candidate_columns:
+                value_map[raw_clean.lower()] = candidate
+
+        maps[col] = value_map
+
+    return maps
+
+
+CATEGORY_MAPS = build_category_maps()
 
 
 # ============================================================
@@ -125,7 +178,7 @@ FEATURE_IMPORTANCE = build_feature_importance()
 # IMPORTANT:
 # Notebook used normalize=True.
 # The trained feature name is "<col>_freq" (e.g. "model_freq"),
-# NOT the bare column name — this is what was wrong before.
+# NOT the bare column name.
 # ============================================================
 
 frequency_columns = [
@@ -220,31 +273,39 @@ def get_request_data():
 
 
 def set_categorical_feature(row, prefix, value):
+    """
+    Looks up the exact trained one-hot column for this raw value using
+    CATEGORY_MAPS (built from the real training data), falling back to
+    the old guessing behavior only if nothing was found (e.g. a brand
+    new value the model never saw during training - in that case there
+    is genuinely no matching column, and leaving it at 0 is correct).
+    """
 
-    value = clean_text(value)
-
-    if not value:
+    value_clean = clean_text(value)
+    if not value_clean:
         return
 
+    exact_map = CATEGORY_MAPS.get(prefix, {})
+    exact_match = exact_map.get(value_clean)
+    if exact_match:
+        row[exact_match] = 1
+        return
+
+    # Fallback: old guessing logic, kept only as a last resort for
+    # values that truly weren't in the training data at all.
     possible_names = [
-
-        f"{prefix}_{value}",
-
-        f"{prefix}_{value.replace(' ', '_')}",
-
-        f"{prefix}_{value.title()}",
-
-        f"{prefix}_{value.upper()}",
-
+        f"{prefix}_{value_clean}",
+        f"{prefix}_{value_clean.replace(' ', '_')}",
+        f"{prefix}_{value_clean.title()}",
+        f"{prefix}_{value_clean.upper()}",
     ]
-
     for name in possible_names:
-
         if name in feature_columns:
-
             row[name] = 1
-
             return
+
+    # Nothing matched at all - log it so it's visible instead of silent.
+    print(f"[warn] no trained column found for {prefix}='{value_clean}'")
 
 
 def build_feature_row(inputs):
@@ -287,8 +348,9 @@ def build_feature_row(inputs):
     # fitness_certificate is boolean-flavoured in the training data
     # (its two raw values are True/False), so get_dummies names its
     # column "fitness_certificate_True" / "fitness_certificate_False".
-    fitness_certificate = inputs.get("fitness_certificate", "")
-    fitness_bool_str = "True" if fitness_certificate in ("yes", "true", "1") else "False"
+    # Use to_bool() here too so checkbox values like "on" are handled
+    # the same way as every other boolean-ish field.
+    fitness_bool_str = "True" if to_bool(inputs.get("fitness_certificate", "")) else "False"
     fitness_column = f"fitness_certificate_{fitness_bool_str}"
     if fitness_column in feature_columns:
         row[fitness_column] = 1
@@ -298,14 +360,6 @@ def build_feature_row(inputs):
         "kms_run": inputs["kms_driven"],
         "total_owners": inputs["total_owners"],
         "original_price": inputs["original_price"],
-
-        # BUG FIX: the notebook engineered this indicator column
-        # (df_clean["original_price_missing"] = original_price.isnull())
-        # and it IS one of the 76 trained features. It was missing
-        # from this row entirely before - always defaulting to 0
-        # regardless of whether original_price was actually supplied.
-        "original_price_missing": 0 if inputs["original_price"] else 1,
-
         "is_hot": inputs.get("is_hot", 0),
         "reserved": inputs.get("reserved", 0),
         "warranty_avail": inputs.get("warranty_avail", 0),
@@ -348,16 +402,18 @@ def find_similar_cars(inputs, limit=5):
         if len(same_make) >= 3:
             candidates = same_make
 
-    if "yr_mfr" in candidates.columns and inputs["manufacturing_year"]:
+    mfr_year = inputs.get("manufacturing_year")
+    if "yr_mfr" in candidates.columns and mfr_year is not None:
         candidates = candidates.assign(
-            _year_diff=(candidates["yr_mfr"] - inputs["manufacturing_year"]).abs()
+            _year_diff=(candidates["yr_mfr"] - mfr_year).abs()
         )
     else:
         candidates = candidates.assign(_year_diff=0)
 
-    if "kms_run" in candidates.columns and inputs["kms_driven"]:
+    kms = inputs.get("kms_driven")
+    if "kms_run" in candidates.columns and kms is not None:
         candidates = candidates.assign(
-            _km_diff=(candidates["kms_run"] - inputs["kms_driven"]).abs()
+            _km_diff=(candidates["kms_run"] - kms).abs()
         )
     else:
         candidates = candidates.assign(_km_diff=0)
