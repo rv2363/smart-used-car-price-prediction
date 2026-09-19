@@ -6,32 +6,32 @@
 <title>Smart Used Car Valuation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
     :root {
-        --ink: #150F22;
-        --paper: #FAFAFC;
+        --ink: #12171B;
+        --ink-soft: #5B6660;
+        --paper: #EFF2EF;
         --panel: #FFFFFF;
-        --line: #E7E2F2;
+        --line: #DBE2DC;
 
-        --violet: #7C3AED;
-        --violet-deep: #4C1D95;
-        --violet-soft: #F1EAFE;
+        --green: #1F5D4C;
+        --green-deep: #123A30;
+        --green-soft: #E3EFE9;
 
-        --emerald: #059669;
-        --emerald-soft: #DEF7EC;
+        --brass: #B87F28;
+        --brass-deep: #8C5F1B;
+        --brass-soft: #F5EAD5;
 
-        --amber: #D97706;
-        --amber-soft: #FDECD2;
+        --red: #AE3A2E;
+        --red-deep: #7E2A21;
+        --red-soft: #F6E1DE;
 
-        --rose: #DC2626;
-        --rose-soft: #FBE3E1;
-
-        --font-display: "Sora", sans-serif;
-        --font-body: "Manrope", sans-serif;
+        --font-display: "Fraunces", serif;
+        --font-body: "Inter", sans-serif;
     }
 
     * { box-sizing: border-box; }
@@ -42,106 +42,239 @@
         background: var(--paper);
         color: var(--ink);
         line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
     }
 
     h1, h2, h3 { font-family: var(--font-display); margin: 0; }
 
-    /* ============================= HERO / HEADER ============================= */
+    a, button, input, select { font-family: inherit; }
+
+    :focus-visible {
+        outline: 2px solid var(--green);
+        outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+
+    /* ============================= HERO ============================= */
     .hero {
         position: relative;
         overflow: hidden;
         background: var(--ink);
-        color: #EFEAFB;
-        padding: 3.2rem 1.5rem 3.6rem;
-        text-align: center;
+        color: #EAF1EC;
+        padding: 3rem 1.6rem 4.6rem;
     }
 
-    .hero__dial {
+    /* Drifting, slowly hue-shifting glow, built from the app's own
+       palette (green / brass / red) so it reads as "alive" without
+       turning into a generic rainbow banner. Opacity is kept high
+       enough to actually read as color, not just a faint tint. */
+    .hero::before {
+        content: "";
         position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 900px;
-        max-width: 220vw;
-        transform: translate(-50%, -38%);
-        opacity: 0.5;
+        top: -25%; right: -25%; bottom: -25%; left: -25%;
+        background:
+            radial-gradient(circle at 20% 30%, rgba(40, 122, 100, 0.95), transparent 52%),
+            radial-gradient(circle at 80% 15%, rgba(214, 163, 77, 0.7), transparent 52%),
+            radial-gradient(circle at 60% 85%, rgba(196, 74, 60, 0.55), transparent 50%),
+            radial-gradient(circle at 92% 82%, rgba(40, 122, 100, 0.65), transparent 48%);
+        filter: blur(48px) hue-rotate(0deg);
+        animation:
+            heroDrift 20s ease-in-out infinite alternate,
+            heroHue 26s linear infinite;
+        z-index: 0;
         pointer-events: none;
     }
 
-    .hero__inner { position: relative; z-index: 1; }
+    /* Soften the glow back into the panel below so the seam disappears. */
+    .hero::after {
+        content: "";
+        position: absolute;
+        top: 0; right: 0; bottom: 0; left: 0;
+        background: linear-gradient(180deg, transparent 45%, var(--ink) 100%);
+        z-index: 0;
+        pointer-events: none;
+    }
 
-    .hero__eyebrow {
+    /* Fine dot-grid texture for depth - a separate layer so it stays
+       crisp instead of being washed out by the glow's blur. */
+    .hero__grid {
+        position: absolute;
+        top: 0; right: 0; bottom: 0; left: 0;
+        z-index: 0;
+        pointer-events: none;
+        background-image: radial-gradient(rgba(234, 241, 236, 0.13) 1px, transparent 1px);
+        background-size: 22px 22px;
+        mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 40%, transparent 90%);
+    }
+
+    @keyframes heroDrift {
+        0%   { transform: translate(0, 0) scale(1); }
+        50%  { transform: translate(-4%, 3%) scale(1.15); }
+        100% { transform: translate(3%, -3%) scale(1.05); }
+    }
+
+    @keyframes heroHue {
+        0%   { filter: blur(48px) hue-rotate(0deg); }
+        100% { filter: blur(48px) hue-rotate(360deg); }
+    }
+
+    .hero__inner {
+        max-width: 1080px;
+        margin: 0 auto;
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 300px;
+        align-items: center;
+        gap: 2rem;
+    }
+
+    .hero__badge {
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-        font-size: 0.8rem;
-        color: #C7B8F2;
-        background: rgba(124, 58, 237, 0.25);
-        border: 1px solid rgba(167, 139, 250, 0.4);
-        padding: 0.35rem 0.9rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #DCE9E1;
+        background: rgba(234, 241, 236, 0.1);
+        border: 1px solid rgba(234, 241, 236, 0.22);
+        padding: 0.4rem 0.85rem 0.4rem 0.7rem;
         border-radius: 999px;
         margin-bottom: 1.1rem;
+        backdrop-filter: blur(4px);
     }
 
+    .hero__badge-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #6FCF9E;
+        box-shadow: 0 0 0 0 rgba(111, 207, 158, 0.6);
+        animation: pulseDot 2s ease-out infinite;
+    }
+
+    @keyframes pulseDot {
+        0%   { box-shadow: 0 0 0 0 rgba(111, 207, 158, 0.55); }
+        70%  { box-shadow: 0 0 0 7px rgba(111, 207, 158, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(111, 207, 158, 0); }
+    }
+
+    .hero__dial-panel {
+        position: relative;
+        justify-self: end;
+        width: 100%;
+        max-width: 280px;
+        padding: 1.6rem;
+        border-radius: 20px;
+        background: rgba(234, 241, 236, 0.05);
+        border: 1px solid rgba(234, 241, 236, 0.14);
+        backdrop-filter: blur(6px);
+        box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.6);
+    }
+
+    .hero__gauge { width: 100%; display: block; }
+
     .hero h1 {
-        font-size: clamp(1.9rem, 4vw, 2.7rem);
-        font-weight: 700;
+        font-size: clamp(2rem, 4vw, 2.9rem);
+        font-weight: 600;
         letter-spacing: -0.01em;
-        margin-bottom: 0.6rem;
+        line-height: 1.12;
+        max-width: 15ch;
+        margin-bottom: 0.85rem;
     }
 
     .hero p {
         font-size: 1.02rem;
-        color: #C9C0E0;
-        max-width: 46ch;
-        margin: 0 auto;
+        color: #C7D6CC;
+        max-width: 42ch;
+        margin: 0 0 1.4rem;
+    }
+
+    .hero__facts {
+        display: flex;
+        flex-wrap: wrap;
+        font-size: 0.86rem;
+        color: #A9BFB1;
+    }
+
+    .hero__facts span {
+        position: relative;
+        padding-left: 1rem;
+        margin-right: 1.5rem;
+    }
+
+    .hero__facts span:first-child { padding-left: 0; }
+
+    .hero__facts span:not(:first-child)::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.45em;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--brass);
+    }
+
+    @media (max-width: 760px) {
+        .hero__inner { grid-template-columns: 1fr; }
+        .hero__dial-panel { justify-self: center; max-width: 190px; }
     }
 
     /* ============================= LAYOUT ============================= */
-    .container {
-        max-width: 980px;
-        margin: 0 auto;
-        padding: 0 1.5rem;
-    }
+    .container { max-width: 1000px; margin: 0 auto; padding: 0 1.6rem; }
 
     .sheet {
         background: var(--panel);
         border: 1px solid var(--line);
-        border-radius: 16px;
-        box-shadow: 0 20px 45px -25px rgba(76, 29, 149, 0.35);
-        margin-top: -2.4rem;
+        border-radius: 14px;
+        box-shadow: 0 24px 48px -32px rgba(18, 23, 27, 0.45);
+        margin-top: -3rem;
         position: relative;
         z-index: 2;
-        padding: 2.2rem 2.2rem 2.4rem;
+        padding: 2.3rem 2.3rem 2.5rem;
+        animation: sheetRise 0.6s cubic-bezier(.22,1,.36,1) both;
+    }
+
+    @keyframes sheetRise {
+        from { opacity: 0; transform: translateY(18px); }
+        to   { opacity: 1; transform: translateY(0); }
     }
 
     .group-title {
         display: flex;
-        align-items: baseline;
-        gap: 0.6rem;
-        font-size: 1.05rem;
-        font-weight: 700;
-        color: var(--violet-deep);
-        margin: 0 0 1.1rem;
-        padding-bottom: 0.7rem;
+        align-items: center;
+        gap: 0.7rem;
+        font-size: 1.08rem;
+        font-weight: 600;
+        color: var(--ink);
+        margin: 0 0 1.2rem;
+        padding-bottom: 0.75rem;
         border-bottom: 1px solid var(--line);
     }
 
-    .group-title:not(:first-child) { margin-top: 2rem; }
+    .group-title:not(:first-child) { margin-top: 2.2rem; }
 
-    .group-title span.glyph {
+    .group-title .badge {
         display: inline-grid;
         place-items: center;
-        width: 26px;
-        height: 26px;
-        border-radius: 8px;
-        background: var(--violet-soft);
-        font-size: 0.95rem;
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        background: var(--green-soft);
+        color: var(--green-deep);
+        flex-shrink: 0;
     }
+
+    .group-title .badge svg { width: 17px; height: 17px; }
 
     .form-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
-        gap: 1.1rem 1.4rem;
+        gap: 1.3rem 1.6rem;
     }
 
     .field { display: flex; flex-direction: column; }
@@ -151,98 +284,264 @@
         font-weight: 600;
         font-size: 0.82rem;
         margin-bottom: 0.4rem;
-        color: #55467E;
+        color: var(--ink-soft);
     }
 
     input, select {
-        font-family: var(--font-body);
-        padding: 0.7rem 0.85rem;
-        border: 1px solid var(--line);
-        border-radius: 9px;
-        font-size: 0.95rem;
-        background: #FCFBFF;
+        padding: 0.6rem 0.1rem 0.6rem;
+        border: none;
+        border-bottom: 1.5px solid var(--line);
+        border-radius: 0;
+        font-size: 0.98rem;
+        background: transparent;
         color: var(--ink);
         outline: none;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        transition: border-color 0.15s ease;
+        appearance: none;
+        -webkit-appearance: none;
     }
 
-    input:focus, select:focus {
-        border-color: var(--violet);
-        box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
-        background: #fff;
+    select {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9' fill='none'%3E%3Cpath d='M1 1.5L7 7.5L13 1.5' stroke='%235B6660' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.2rem center;
+        padding-right: 1.4rem;
+        cursor: pointer;
     }
 
-    /* ============================= BUTTON ============================= */
-    .predict-btn {
-        --shine-x: -120%;
+    input::placeholder { color: #A7AFA9; }
+
+    .field-hint {
+        margin: 0.4rem 0 0;
+        font-size: 0.78rem;
+        color: var(--brass-deep);
+    }
+
+    select.locked {
+        color: var(--ink-soft);
+        border-bottom-style: dashed;
+    }
+
+    input:focus, select:focus { border-bottom-color: var(--green); }
+
+    input:required, select:required { background-position-x: right 0.2rem; }
+
+    /* ============================= BUTTONS ============================= */
+    .btn-icon {
+        display: inline-grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.18);
+        flex-shrink: 0;
+    }
+
+    .btn-icon svg { width: 16px; height: 16px; }
+
+    .btn-icon--ghost {
+        background: var(--green-soft);
+        color: var(--green-deep);
+        transition: background 0.18s ease, color 0.18s ease;
+    }
+
+    .btn-primary {
         position: relative;
         overflow: hidden;
         width: 100%;
-        margin-top: 1.8rem;
-        padding: 1rem 1.4rem;
+        padding: 0.95rem 1.5rem;
         border: none;
-        border-radius: 12px;
-        background: linear-gradient(120deg, var(--violet-deep), var(--violet) 55%, var(--emerald));
-        color: white;
+        border-radius: 14px;
+        background: linear-gradient(120deg, var(--green-deep), var(--green) 75%);
+        color: #EFF6F1;
         font-family: var(--font-display);
-        font-size: 1.02rem;
-        font-weight: 700;
+        font-size: 1.04rem;
+        font-weight: 600;
         letter-spacing: 0.01em;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 0.6rem;
-        box-shadow: 0 12px 26px -14px rgba(76, 29, 149, 0.65);
-        transition: transform 0.12s ease, box-shadow 0.2s ease;
+        gap: 0.7rem;
+        box-shadow: 0 16px 30px -14px rgba(18, 58, 48, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        transition: transform 0.18s cubic-bezier(.22,1,.36,1), box-shadow 0.25s ease;
     }
 
-    .predict-btn::after {
+    /* A slow, quiet light sweep - drawing the eye to the one primary
+       action without ever feeling like a busy loading spinner. */
+    .btn-primary::before {
         content: "";
         position: absolute;
         top: 0;
-        left: var(--shine-x);
-        width: 40%;
+        left: -60%;
+        width: 45%;
         height: 100%;
-        background: linear-gradient(120deg, transparent, rgba(255,255,255,0.35), transparent);
-        transition: left 0.6s ease;
+        background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+        transform: skewX(-20deg);
+        animation: btnShimmer 4.5s ease-in-out infinite;
     }
 
-    .predict-btn:hover::after { left: 120%; }
-    .predict-btn:hover { box-shadow: 0 16px 32px -14px rgba(76, 29, 149, 0.75); }
-    .predict-btn:active { transform: translateY(1px) scale(0.995); }
+    @keyframes btnShimmer {
+        0%   { left: -60%; }
+        45%  { left: 130%; }
+        100% { left: 130%; }
+    }
 
-    .predict-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 22px 38px -14px rgba(18, 58, 48, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    }
+    .btn-primary:active { transform: translateY(0) scale(0.985); }
+
+    .btn-secondary {
+        width: 100%;
+        padding: 0.8rem 1.2rem;
+        border: 1.5px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel);
+        color: var(--ink);
+        font-weight: 700;
+        font-size: 0.94rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.65rem;
+        box-shadow: 0 1px 2px rgba(18, 23, 27, 0.04);
+        transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s cubic-bezier(.22,1,.36,1);
+    }
+
+    .btn-secondary:hover {
+        border-color: var(--green);
+        box-shadow: 0 14px 26px -16px rgba(18, 58, 48, 0.4);
+        transform: translateY(-1px);
+    }
+
+    .btn-secondary:hover .btn-icon--ghost { background: var(--green); color: #fff; }
+
+    .btn-secondary:active { transform: translateY(0); }
+
+    form > .btn-primary { margin-top: 2rem; }
+
+    /* ============================= OPTIONAL DETAILS TOGGLE ============================= */
+    .optional-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-top: 0.4rem;
+        padding: 0.5rem 0.9rem 0.5rem 0.5rem;
+        border: 1.5px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--green-deep);
+        font-weight: 700;
+        font-size: 0.86rem;
+        cursor: pointer;
+        transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .optional-toggle:hover {
+        border-color: var(--green);
+        background: var(--green-soft);
+        box-shadow: 0 8px 18px -12px rgba(18, 58, 48, 0.35);
+    }
+
+    .optional-toggle__icon {
+        display: inline-grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--green-soft);
+        color: var(--green-deep);
+        flex-shrink: 0;
+        transition: transform 0.3s cubic-bezier(.22,1,.36,1), background 0.18s ease, color 0.18s ease;
+    }
+
+    .optional-toggle__icon svg { width: 14px; height: 14px; }
+
+    .optional-toggle[aria-expanded="true"] .optional-toggle__icon {
+        transform: rotate(45deg);
+        background: var(--green);
+        color: #fff;
+    }
+
+    .optional-wrap {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.4s cubic-bezier(.22,1,.36,1);
+    }
+
+    .optional-wrap.open { grid-template-rows: 1fr; }
+
+    .optional-panel {
+        overflow: hidden;
+        min-height: 0;
+        box-sizing: border-box;
+        opacity: 0;
+        margin-top: 0;
+        padding-top: 0;
+        border-top: 1px dashed transparent;
+        transition: opacity 0.25s ease, margin-top 0.4s ease, padding-top 0.4s ease, border-color 0.4s ease;
+    }
+
+    .optional-wrap.open .optional-panel {
+        opacity: 1;
+        margin-top: 1.3rem;
+        padding-top: 1.3rem;
+        border-top-color: var(--line);
+        transition: opacity 0.3s ease 0.15s, margin-top 0.4s ease, padding-top 0.4s ease, border-color 0.4s ease;
+    }
+
+    /* ============================= LOADING METER ============================= */
+    .loading {
+        display: none;
+        margin-top: 1.7rem;
+        padding: 2.6rem 2.3rem 2.8rem;
+        text-align: center;
+    }
+
+    .loading__ring { width: 150px; height: 150px; margin: 0 auto 1.4rem; }
+
+    .loading__ring circle { fill: none; stroke-width: 8; }
+    .loading__ring .track { stroke: var(--line); }
+    .loading__ring .progress {
+        stroke: var(--green);
+        stroke-linecap: round;
+        transform: rotate(-90deg);
+        transform-origin: 50% 50%;
+        stroke-dasharray: 345.6;
+        stroke-dashoffset: 345.6;
+        transition: stroke-dashoffset 5s linear;
+    }
+
+    .loading__pct {
+        font-family: var(--font-display);
+        font-size: 1.7rem;
+        font-weight: 600;
+        fill: var(--ink);
+    }
+
+    .loading h2 { font-size: 1.1rem; color: var(--ink); margin-bottom: 0.4rem; }
+    .loading p { font-size: 0.92rem; color: var(--ink-soft); min-height: 1.3em; margin: 0; }
 
     /* ============================= RESULT ============================= */
-    .result {
-        display: none;
-        margin-top: 1.6rem;
-        padding: 2.1rem 2.2rem 2.3rem;
+    .result { display: none; margin-top: 1.7rem; padding: 2.2rem 2.3rem 2.4rem; }
+
+    .result__head { text-align: center; margin-bottom: 0.3rem; }
+    .result__head p {
+        font-size: 0.86rem;
+        color: var(--ink-soft);
+        margin: 0.2rem 0 0;
     }
 
-    .result__head {
-        text-align: center;
-        margin-bottom: 0.4rem;
-    }
-
-    .result__head h2 {
-        font-size: 1.2rem;
-        color: var(--violet-deep);
-    }
-
-    .gauge {
-        max-width: 300px;
-        margin: 0.6rem auto 0.2rem;
-        text-align: center;
-    }
-
+    .gauge { max-width: 280px; margin: 0.7rem auto 0.1rem; text-align: center; }
     .gauge svg { width: 100%; }
 
     .gauge__track { fill: none; stroke: var(--line); stroke-width: 12; }
-    .gauge__zone--under { fill: none; stroke: var(--emerald); stroke-width: 12; opacity: 0.85; }
-    .gauge__zone--fair  { fill: none; stroke: var(--violet); stroke-width: 12; opacity: 0.9; }
-    .gauge__zone--over  { fill: none; stroke: var(--rose); stroke-width: 12; opacity: 0.85; }
+    .gauge__zone--under { fill: none; stroke: var(--green); stroke-width: 12; opacity: 0.9; }
+    .gauge__zone--fair  { fill: none; stroke: var(--brass); stroke-width: 12; opacity: 0.9; }
+    .gauge__zone--over  { fill: none; stroke: var(--red); stroke-width: 12; opacity: 0.9; }
 
     .gauge__needle {
         stroke: var(--ink);
@@ -255,91 +554,130 @@
 
     .price {
         font-family: var(--font-display);
-        font-size: 2.5rem;
-        font-weight: 800;
-        color: var(--violet-deep);
+        font-size: 2.6rem;
+        font-weight: 600;
+        color: var(--ink);
         margin: 0.2rem 0 0;
+        letter-spacing: -0.01em;
     }
 
-    .price-caption {
-        font-size: 0.85rem;
-        color: #7A6C9C;
-        margin-bottom: 1.6rem;
-    }
+    .price-caption { font-size: 0.85rem; color: var(--ink-soft); margin-bottom: 1.7rem; }
 
-    .chip-row {
+    /* Spec strip - one bordered row, segments divided by a rule, like a
+       vehicle spec plate rather than three separate shadowed cards. */
+    .spec-strip {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 0.9rem;
-    }
-
-    .chip {
-        background: #FCFBFF;
         border: 1px solid var(--line);
-        border-left: 4px solid var(--violet);
-        border-radius: 10px;
-        padding: 0.9rem 1rem;
+        border-radius: 12px;
+        overflow: hidden;
     }
 
-    .chip.chip--amber { border-left-color: var(--amber); }
-    .chip.chip--status { border-left-color: var(--emerald); }
-
-    .chip h4 {
-        font-size: 0.76rem;
-        font-weight: 700;
-        color: #7A6C9C;
-        margin: 0 0 0.35rem;
-        text-transform: none;
+    .spec-strip__item {
+        padding: 1rem 1.1rem;
+        border-left: 1px solid var(--line);
+        text-align: center;
     }
 
-    .chip p {
+    .spec-strip__item:first-child { border-left: none; }
+
+    .spec-strip__item h4 {
+        font-family: var(--font-body);
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--ink-soft);
+        margin: 0 0 0.4rem;
+    }
+
+    .spec-strip__item p {
         margin: 0;
-        font-size: 1.15rem;
+        font-size: 1.18rem;
         font-weight: 700;
         font-family: var(--font-display);
         color: var(--ink);
+    }
+
+    .spec-strip__item[data-tone="good"] p { color: var(--green-deep); }
+    .spec-strip__item[data-tone="fair"] p { color: var(--brass-deep); }
+    .spec-strip__item[data-tone="bad"] p { color: var(--red-deep); }
+
+    .confidence-row {
+        margin-top: 0.9rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0.95rem 1.1rem;
+        text-align: center;
+    }
+    .confidence-row h4 {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--ink-soft);
+        margin: 0 0 0.35rem;
+    }
+    .confidence-row p {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 700;
+        font-family: var(--font-display);
     }
 
     .recommendation {
         margin-top: 1.4rem;
         padding: 1rem 1.2rem;
         border-radius: 10px;
-        background: var(--emerald-soft);
-        color: #065F46;
         font-weight: 700;
         text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.55rem;
+        border: 1px solid transparent;
     }
 
-    table.similar-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.9rem;
-    }
+    .recommendation svg { width: 19px; height: 19px; flex-shrink: 0; }
+
+    .recommendation[data-tone="good"] { background: var(--green-soft); color: var(--green-deep); border-color: #C9E1D3; }
+    .recommendation[data-tone="fair"] { background: var(--brass-soft); color: var(--brass-deep); border-color: #E9D6AC; }
+    .recommendation[data-tone="bad"]  { background: var(--red-soft);   color: var(--red-deep);   border-color: #EBC3BC; }
+
+    /* ============================= TABLE ============================= */
+    table.similar-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
     table.similar-table th {
         text-align: left;
-        padding: 0.55rem 0.5rem;
-        border-bottom: 1px solid var(--line);
-        color: #55467E;
-        font-weight: 700;
+        padding: 0.6rem 0.5rem;
+        border-bottom: 1.5px solid var(--line);
+        color: var(--ink-soft);
+        font-weight: 600;
+        font-size: 0.8rem;
     }
     table.similar-table td {
-        padding: 0.55rem 0.5rem;
-        border-bottom: 1px solid #F0EDF9;
+        padding: 0.65rem 0.5rem;
+        border-bottom: 1px solid var(--line);
     }
+    table.similar-table th:not(:first-child),
+    table.similar-table td:not(:first-child) { text-align: right; }
+    table.similar-table tbody tr:hover { background: var(--green-soft); }
+    table.similar-table td:last-child { font-weight: 700; color: var(--green-deep); }
 
     .emi-btn-wrap { display: flex; align-items: flex-end; }
-    .emi-btn-wrap .predict-btn { margin-top: 0; }
+
+    canvas { max-width: 100%; }
 
     .footer {
         text-align: center;
-        padding: 2.4rem 1.5rem 3rem;
-        color: #7A6C9C;
+        padding: 2.6rem 1.6rem 3.2rem;
+        color: var(--ink-soft);
         font-size: 0.85rem;
     }
 
+    .footer p { margin: 0.3rem 0 0; font-size: 0.78rem; }
+
     @media (max-width: 680px) {
-        .form-grid, .chip-row { grid-template-columns: 1fr; }
-        .sheet, .result { padding: 1.6rem 1.3rem 1.9rem; }
+        .form-grid { grid-template-columns: 1fr; }
+        .spec-strip { grid-template-columns: 1fr; }
+        .spec-strip__item { border-left: none; border-top: 1px solid var(--line); }
+        .spec-strip__item:first-child { border-top: none; }
+        .sheet, .result { padding: 1.7rem 1.3rem 2rem; }
     }
 </style>
 </head>
@@ -347,22 +685,31 @@
 <body>
 
 <div class="hero">
-    <svg class="hero__dial" viewBox="0 0 900 500" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <g fill="none" stroke="#A78BFA" stroke-width="1.2">
-            <path d="M 150 420 A 300 300 0 0 1 750 420" />
-            <path d="M 210 420 A 240 240 0 0 1 690 420" opacity="0.55" />
-            <path d="M 270 420 A 180 180 0 0 1 630 420" opacity="0.3" />
-        </g>
-        <g stroke="#34D399" stroke-width="2">
-            <line x1="450" y1="120" x2="450" y2="150" />
-            <line x1="620" y1="165" x2="600" y2="190" />
-            <line x1="280" y1="165" x2="300" y2="190" />
-        </g>
-    </svg>
+    <div class="hero__grid" aria-hidden="true"></div>
     <div class="hero__inner">
-        <span class="hero__eyebrow">MCA Mini Project &nbsp;&middot;&nbsp; Machine Learning</span>
-        <h1>Smart Used Car Valuation</h1>
-        <p>Enter your car's details and an XGBoost model trained on real resale data estimates what it's actually worth.</p>
+        <div>
+            <span class="hero__badge"><span class="hero__badge-dot"></span>Instant valuation</span>
+            <h1>What's this car actually worth?</h1>
+            <p>Enter the details from the listing and get an instant valuation — a fair price range, depreciation against the original price, and how it stacks up against similar cars.</p>
+            <div class="hero__facts">
+                <span>Built on real listing data</span>
+                <span>Instant result</span>
+                <span>No sign-up needed</span>
+            </div>
+        </div>
+        <div class="hero__dial-panel">
+            <svg class="hero__gauge" viewBox="0 0 240 160" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M 20 140 A 100 100 0 0 1 220 140" stroke="#3E5C4F" stroke-width="1.4" />
+                <path d="M 44 140 A 76 76 0 0 1 196 140" stroke="#3E5C4F" stroke-width="1" opacity="0.6" />
+                <g stroke="#D6A34D" stroke-width="2" stroke-linecap="round">
+                    <line x1="120" y1="34" x2="120" y2="50" />
+                    <line x1="196" y1="66" x2="182" y2="78" />
+                    <line x1="44" y1="66" x2="58" y2="78" />
+                </g>
+                <line x1="120" y1="140" x2="150" y2="66" stroke="#EAF1EC" stroke-width="2.5" stroke-linecap="round" />
+                <circle cx="120" cy="140" r="6" fill="#EAF1EC" />
+            </svg>
+        </div>
     </div>
 </div>
 
@@ -372,37 +719,37 @@
 
         <form id="predictionForm">
 
-            <h2 class="group-title"><span class="glyph">🚘</span> Car details</h2>
+            <h2 class="group-title">
+                <span class="badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm14 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0M5 17V9.5a1 1 0 0 1 .3-.7l2.4-2.4A2 2 0 0 1 9.1 6h5.8a2 2 0 0 1 1.4.6l2.4 2.4a1 1 0 0 1 .3.7V17"/><path d="M2 12h20"/></svg>
+                </span>
+                Car details
+            </h2>
             <div class="form-grid">
 
                 <div class="field">
-                    <label>Car name</label>
-                    <input type="text" name="car_name" placeholder="e.g. maruti swift" required>
+                    <label for="make">Make / brand</label>
+                    <input id="make" type="text" name="make" placeholder="e.g. Maruti" required>
                 </div>
 
                 <div class="field">
-                    <label>Make / brand</label>
-                    <input type="text" name="make" placeholder="e.g. maruti" required>
+                    <label for="model">Model</label>
+                    <input id="model" type="text" name="model" placeholder="e.g. Swift" required>
                 </div>
 
                 <div class="field">
-                    <label>Model</label>
-                    <input type="text" name="model" placeholder="e.g. swift" required>
+                    <label for="yr_mfr">Manufacturing year</label>
+                    <input id="yr_mfr" type="number" name="yr_mfr" min="1996" max="2026" placeholder="2020" required>
                 </div>
 
                 <div class="field">
-                    <label>Manufacturing year</label>
-                    <input type="number" name="yr_mfr" min="1996" max="2026" placeholder="2020" required>
+                    <label for="kms_run">Kilometers driven</label>
+                    <input id="kms_run" type="number" name="kms_run" min="0" placeholder="50000" required>
                 </div>
 
                 <div class="field">
-                    <label>Kilometers driven</label>
-                    <input type="number" name="kms_run" min="0" placeholder="50000" required>
-                </div>
-
-                <div class="field">
-                    <label>Fuel type</label>
-                    <select name="fuel_type" required>
+                    <label for="fuel_type">Fuel type</label>
+                    <select id="fuel_type" name="fuel_type" required>
                         <option value="">Select fuel</option>
                         <option value="petrol">Petrol</option>
                         <option value="diesel">Diesel</option>
@@ -413,33 +760,28 @@
                 </div>
 
                 <div class="field">
-                    <label>Transmission</label>
-                    <select name="transmission" required>
+                    <label for="transmission">Transmission</label>
+                    <select id="transmission" name="transmission" required>
                         <option value="">Select transmission</option>
-                        <option value="manual">Manual</option>
+                        <option id="manualOption" value="manual">Manual</option>
                         <option value="automatic">Automatic</option>
                     </select>
-                </div>
-
-                <div class="field">
-                    <label>Body type</label>
-                    <select name="body_type">
-                        <option value="hatchback">Hatchback</option>
-                        <option value="sedan">Sedan</option>
-                        <option value="suv">SUV</option>
-                        <option value="muv">MUV</option>
-                        <option value="coupe">Coupe</option>
-                    </select>
+                    <p class="field-hint" id="transmissionHint" hidden>Electric cars in this dataset are automatic only.</p>
                 </div>
 
             </div>
 
-            <h2 class="group-title"><span class="glyph">📍</span> Ownership &amp; listing</h2>
+            <h2 class="group-title">
+                <span class="badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11.5A7 7 0 0 1 19 9.5C19 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.4"/></svg>
+                </span>
+                Ownership &amp; listing
+            </h2>
             <div class="form-grid">
 
                 <div class="field">
-                    <label>Total owners</label>
-                    <select name="total_owners" required>
+                    <label for="total_owners">Total owners</label>
+                    <select id="total_owners" name="total_owners" required>
                         <option value="1">1st owner</option>
                         <option value="2">2nd owner</option>
                         <option value="3">3rd owner</option>
@@ -448,18 +790,41 @@
                 </div>
 
                 <div class="field">
-                    <label>City</label>
-                    <input type="text" name="city" placeholder="e.g. mumbai" required>
+                    <label for="city">City</label>
+                    <input id="city" type="text" name="city" placeholder="e.g. Mumbai" required>
+                </div>
+
+            </div>
+
+            <button type="button" class="optional-toggle" id="optionalToggle" aria-expanded="false" aria-controls="optionalPanel">
+                <span class="optional-toggle__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                </span>
+                <span id="optionalToggleLabel">Add more details for a sharper estimate</span>
+            </button>
+
+            <div class="optional-wrap" id="optionalWrap">
+                <div class="form-grid optional-panel" id="optionalPanel">
+
+                <div class="field">
+                    <label for="body_type">Body type</label>
+                    <select id="body_type" name="body_type">
+                        <option value="hatchback">Hatchback</option>
+                        <option value="sedan">Sedan</option>
+                        <option value="suv">SUV</option>
+                        <option value="muv">MUV</option>
+                        <option value="coupe">Coupe</option>
+                    </select>
                 </div>
 
                 <div class="field">
-                    <label>Original price (₹)</label>
-                    <input type="number" name="original_price" min="0" placeholder="700000">
+                    <label for="original_price">Original price (₹)</label>
+                    <input id="original_price" type="number" name="original_price" min="0" placeholder="700000">
                 </div>
 
                 <div class="field">
-                    <label>Car rating</label>
-                    <select name="car_rating">
+                    <label for="car_rating">Car rating</label>
+                    <select id="car_rating" name="car_rating">
                         <option value="great">Great</option>
                         <option value="good">Good</option>
                         <option value="fair">Fair</option>
@@ -468,17 +833,30 @@
                 </div>
 
             </div>
+            </div>
 
-            <button type="submit" class="predict-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 12 15.5 8.5"/><path d="M12 4v1"/><path d="M20 12h-1"/></svg>
-                Predict car price
+            <button type="submit" class="btn-primary">
+                <span class="btn-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 12 15.5 8.5"/><path d="M12 4v1"/><path d="M20 12h-1"/></svg>
+                </span>
+                <span>Predict car price</span>
             </button>
 
         </form>
 
     </div>
 
-    <div class="sheet result" id="result">
+    <div class="sheet loading" id="loadingState" aria-live="polite">
+        <svg class="loading__ring" viewBox="0 0 120 120">
+            <circle class="track" cx="60" cy="60" r="55"></circle>
+            <circle class="progress" id="loadingProgress" cx="60" cy="60" r="55"></circle>
+            <text x="60" y="67" text-anchor="middle" class="loading__pct" id="loadingPct">0%</text>
+        </svg>
+        <h2>Calculating fair price</h2>
+        <p id="loadingMessage">Reading the listing details…</p>
+    </div>
+
+    <div class="sheet result" id="result" aria-live="polite">
 
         <div class="result__head">
             <h2>Estimated market value</h2>
@@ -495,41 +873,51 @@
             </svg>
         </div>
 
-        <div class="price" id="predictedPrice">₹0</div>
-        <p class="price-caption">predicted market price</p>
+        <div style="text-align:center;">
+            <div class="price" id="predictedPrice">₹0</div>
+            <p class="price-caption">predicted market price</p>
+        </div>
 
-        <div class="chip-row">
-            <div class="chip">
+        <div class="spec-strip">
+            <div class="spec-strip__item" id="fairPriceItem">
                 <h4>Fair price</h4>
                 <p id="fairPrice">₹0</p>
             </div>
-            <div class="chip chip--amber">
+            <div class="spec-strip__item" id="depreciationItem">
                 <h4>Depreciation</h4>
                 <p id="depreciation">0%</p>
             </div>
-            <div class="chip chip--status">
+            <div class="spec-strip__item" id="statusItem">
                 <h4>Valuation status</h4>
                 <p id="status">Fair</p>
             </div>
         </div>
 
-        <div class="chip-row" style="margin-top:0.9rem;">
-            <div class="chip" style="grid-column: 1 / -1;">
-                <h4>Confidence range</h4>
-                <p id="confidenceRange">₹0 – ₹0</p>
-            </div>
+        <div class="confidence-row">
+            <h4>Confidence range</h4>
+            <p id="confidenceRange">₹0 – ₹0</p>
         </div>
 
-        <div class="recommendation" id="recommendation">
-            👍 Good deal
+        <div class="recommendation" id="recommendation" data-tone="fair">
+            Negotiate
         </div>
 
         <!-- ======= FEATURE IMPORTANCE ======= -->
-        <h2 class="group-title"><span class="glyph">📊</span> What drove this price</h2>
+        <h2 class="group-title">
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+            </span>
+            What drove this price
+        </h2>
         <canvas id="importanceChart" height="220"></canvas>
 
         <!-- ======= SIMILAR CARS ======= -->
-        <h2 class="group-title"><span class="glyph">🔎</span> Similar cars in the data</h2>
+        <h2 class="group-title">
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+            Similar cars in the data
+        </h2>
         <table class="similar-table">
             <thead>
                 <tr>
@@ -543,37 +931,55 @@
         </table>
 
         <!-- ======= PRICE TREND ======= -->
-        <h2 class="group-title"><span class="glyph">📈</span> Price by manufacturing year</h2>
+        <h2 class="group-title">
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
+            </span>
+            Price by manufacturing year
+        </h2>
         <canvas id="trendChart" height="220"></canvas>
 
         <!-- ======= EMI CALCULATOR ======= -->
-        <h2 class="group-title"><span class="glyph">💳</span> EMI calculator</h2>
+        <h2 class="group-title">
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 10h19"/></svg>
+            </span>
+            EMI calculator
+        </h2>
         <div class="form-grid">
             <div class="field">
-                <label>Down payment (₹)</label>
-                <input type="number" id="emiDownPayment" value="100000" min="0">
+                <label for="emiDownPayment">Down payment (₹)</label>
+                <input id="emiDownPayment" type="number" value="100000" min="0">
             </div>
             <div class="field">
-                <label>Interest rate (% per year)</label>
-                <input type="number" id="emiRate" value="9.5" step="0.1" min="0">
+                <label for="emiRate">Interest rate (% per year)</label>
+                <input id="emiRate" type="number" value="9.5" step="0.1" min="0">
             </div>
             <div class="field">
-                <label>Tenure (months)</label>
-                <input type="number" id="emiTenure" value="36" min="6" max="84">
+                <label for="emiTenure">Tenure (months)</label>
+                <input id="emiTenure" type="number" value="36" min="6" max="84">
             </div>
             <div class="field emi-btn-wrap">
-                <button type="button" class="predict-btn" id="calcEmiBtn">Calculate EMI</button>
+                <button type="button" class="btn-secondary" id="calcEmiBtn">
+                    <span class="btn-icon btn-icon--ghost">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+                    </span>
+                    <span>Calculate EMI</span>
+                </button>
             </div>
         </div>
-        <div class="chip-row" style="margin-top:1rem;">
-            <div class="chip"><h4>Loan amount</h4><p id="emiLoanAmount">₹0</p></div>
-            <div class="chip chip--amber"><h4>Monthly EMI</h4><p id="emiMonthly">₹0</p></div>
-            <div class="chip chip--status"><h4>Total interest</h4><p id="emiInterest">₹0</p></div>
+        <div class="spec-strip" style="margin-top:1.1rem;">
+            <div class="spec-strip__item"><h4>Loan amount</h4><p id="emiLoanAmount">₹0</p></div>
+            <div class="spec-strip__item"><h4>Monthly EMI</h4><p id="emiMonthly">₹0</p></div>
+            <div class="spec-strip__item"><h4>Total interest</h4><p id="emiInterest">₹0</p></div>
         </div>
 
         <!-- ======= PDF DOWNLOAD ======= -->
-        <button type="button" class="predict-btn" id="downloadPdfBtn" style="margin-top:2rem;">
-            ⬇ Download valuation report (PDF)
+        <button type="button" class="btn-secondary" id="downloadPdfBtn" style="margin-top:2rem;">
+            <span class="btn-icon btn-icon--ghost">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            </span>
+            <span>Download valuation report (PDF)</span>
         </button>
 
     </div>
@@ -581,11 +987,64 @@
 </div>
 
 <div class="footer">
-    Smart Used Car Price Prediction &amp; Valuation System<br>
-    MCA Mini Project &middot; Machine Learning
+    Smart Used Car Price Prediction &amp; Valuation System
+    <p>Estimates are based on historical listing data and are not a guarantee of actual sale price.</p>
 </div>
 
 <script>
+
+// ---- Optional details toggle ----
+const optionalToggle = document.getElementById("optionalToggle");
+const optionalPanel = document.getElementById("optionalPanel");
+const optionalToggleLabel = document.getElementById("optionalToggleLabel");
+
+const optionalWrap = document.getElementById("optionalWrap");
+
+optionalToggle.addEventListener("click", () => {
+    const isOpen = optionalWrap.classList.contains("open");
+    optionalWrap.classList.toggle("open", !isOpen);
+    optionalToggle.setAttribute("aria-expanded", String(!isOpen));
+    optionalToggleLabel.textContent = isOpen
+        ? "Add more details for a sharper estimate"
+        : "Hide extra details";
+});
+
+// ---- Conditional field rules ----
+// A small rules table rather than one-off if/else, so more
+// fuel-type -> transmission constraints can be added later
+// (e.g. if a future fuel type should also lock the choice).
+const FUEL_TRANSMISSION_LOCK = {
+    electric: "automatic",
+};
+
+const fuelTypeField = document.getElementById("fuel_type");
+const transmissionField = document.getElementById("transmission");
+const manualOption = document.getElementById("manualOption");
+const transmissionBlankOption = transmissionField.querySelector('option[value=""]');
+const transmissionHint = document.getElementById("transmissionHint");
+
+function applyFuelTransmissionRule() {
+    const lockedValue = FUEL_TRANSMISSION_LOCK[fuelTypeField.value];
+
+    if (lockedValue) {
+        transmissionField.value = lockedValue;
+        // Disable the other options rather than the <select> itself -
+        // a disabled field is silently dropped from FormData on submit,
+        // which would send transmission as empty instead of "automatic".
+        manualOption.disabled = true;
+        transmissionBlankOption.disabled = true;
+        transmissionField.classList.add("locked");
+        transmissionHint.hidden = false;
+    } else {
+        manualOption.disabled = false;
+        transmissionBlankOption.disabled = false;
+        transmissionField.classList.remove("locked");
+        transmissionHint.hidden = true;
+    }
+}
+
+fuelTypeField.addEventListener("change", applyFuelTransmissionRule);
+applyFuelTransmissionRule();
 
 function setNeedle(ratio) {
     // ratio = predicted / fair (or 1 if unknown) -> maps to the semicircle.
@@ -595,6 +1054,91 @@ function setNeedle(ratio) {
     const rotation = 90 - angle;
     const needle = document.getElementById("gaugeNeedle");
     if (needle) needle.style.transform = `rotate(${rotation}deg)`;
+}
+
+// Maps the backend's raw status/recommendation strings to a display
+// label, a semantic tone (good/fair/bad), and an icon - so the same
+// tone drives the spec-strip color, the recommendation banner color,
+// and its icon consistently instead of everything defaulting to green.
+const STATUS_TONE = {
+    UNDERPRICED: { label: "Underpriced", tone: "good" },
+    FAIR:        { label: "Fair",        tone: "fair" },
+    OVERPRICED:  { label: "Overpriced",  tone: "bad"  },
+};
+
+const RECOMMENDATION_INFO = {
+    BUY: {
+        label: "Buy",
+        tone: "good",
+        icon: '<path d="M20 6 9 17l-5-5"/>'
+    },
+    NEGOTIATE: {
+        label: "Negotiate",
+        tone: "fair",
+        icon: '<path d="M12 21s-7-6.1-7-11.5A7 7 0 0 1 19 9.5C19 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.4"/>'
+    },
+    AVOID: {
+        label: "Avoid",
+        tone: "bad",
+        icon: '<circle cx="12" cy="12" r="9"/><path d="m15 9-6 6m0-6 6 6"/>'
+    },
+};
+
+// ---- Loading meter ----
+const LOADING_DURATION_MS = 5000;
+const LOADING_MESSAGES = [
+    "Reading the listing details…",
+    "Comparing with similar cars…",
+    "Checking the depreciation curve…",
+    "Working out the fair price range…",
+];
+
+let loadingMessageTimer = null;
+let loadingPctTimer = null;
+
+function startLoadingMeter() {
+    const ring = document.getElementById("loadingProgress");
+    const pctLabel = document.getElementById("loadingPct");
+    const messageLabel = document.getElementById("loadingMessage");
+    const circumference = 345.6;
+
+    document.getElementById("loadingState").style.display = "block";
+    document.getElementById("result").style.display = "none";
+
+    // Force layout so the transition below actually animates from 0.
+    ring.style.transition = "none";
+    ring.style.strokeDashoffset = circumference;
+    // eslint-disable-next-line no-unused-expressions
+    ring.getBoundingClientRect();
+    ring.style.transition = `stroke-dashoffset ${LOADING_DURATION_MS}ms linear`;
+    requestAnimationFrame(() => { ring.style.strokeDashoffset = "0"; });
+
+    const startTime = performance.now();
+    loadingPctTimer = setInterval(() => {
+        const elapsed = performance.now() - startTime;
+        const pct = Math.min(100, Math.round((elapsed / LOADING_DURATION_MS) * 100));
+        pctLabel.textContent = pct + "%";
+        if (pct >= 100) clearInterval(loadingPctTimer);
+    }, 50);
+
+    let messageIndex = 0;
+    messageLabel.textContent = LOADING_MESSAGES[0];
+    loadingMessageTimer = setInterval(() => {
+        messageIndex = (messageIndex + 1) % LOADING_MESSAGES.length;
+        messageLabel.textContent = LOADING_MESSAGES[messageIndex];
+    }, LOADING_DURATION_MS / LOADING_MESSAGES.length);
+
+    document.getElementById("loadingState").scrollIntoView({ behavior: "smooth" });
+}
+
+function stopLoadingMeter() {
+    clearInterval(loadingPctTimer);
+    clearInterval(loadingMessageTimer);
+    document.getElementById("loadingState").style.display = "none";
+}
+
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 document.getElementById("predictionForm").addEventListener("submit", async function(e) {
@@ -609,17 +1153,26 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
         data[key] = value;
     });
 
+    startLoadingMeter();
+
     try {
 
-        const response = await fetch("/predict", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(data)
-        });
+        // Run the real request and a fixed 5-second minimum display time
+        // in parallel, so the meter always plays out fully even if the
+        // server responds instantly - and never waits longer than the
+        // server actually takes beyond that floor.
+        const [response] = await Promise.all([
+            fetch("/predict", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            }),
+            wait(LOADING_DURATION_MS)
+        ]);
 
         const result = await response.json();
+
+        stopLoadingMeter();
 
         if (!response.ok) {
             alert(result.error || "Prediction failed");
@@ -642,12 +1195,18 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
         }
 
         if (result.status) {
-            document.getElementById("status").innerText = result.status;
+            const info = STATUS_TONE[result.status] || { label: result.status, tone: "fair" };
+            document.getElementById("status").innerText = info.label;
+            document.getElementById("statusItem").setAttribute("data-tone", info.tone);
         }
 
         if (result.recommendation) {
-            document.getElementById("recommendation").innerText =
-                result.recommendation;
+            const info = RECOMMENDATION_INFO[result.recommendation] ||
+                { label: result.recommendation, tone: "fair", icon: "" };
+            const banner = document.getElementById("recommendation");
+            banner.setAttribute("data-tone", info.tone);
+            banner.innerHTML =
+                `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${info.icon}</svg>${info.label}`;
         }
 
         // ---- Confidence range ----
@@ -672,7 +1231,7 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
                     <td>${car.make} ${car.model}</td>
                     <td>${car.year ?? "—"}</td>
                     <td>${car.kms ? Number(car.kms).toLocaleString("en-IN") : "—"}</td>
-                    <td style="font-weight:700;">₹${car.price ? Number(car.price).toLocaleString("en-IN") : "—"}</td>
+                    <td>₹${car.price ? Number(car.price).toLocaleString("en-IN") : "—"}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -697,6 +1256,8 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
 
     } catch (error) {
 
+        stopLoadingMeter();
+
         alert("Unable to connect with Flask server.");
 
         console.error(error);
@@ -706,6 +1267,8 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
 
 let importanceChartInstance = null;
 let trendChartInstance = null;
+
+const CHART_FONT = "Inter, sans-serif";
 
 function renderImportanceChart(data) {
     const ctx = document.getElementById("importanceChart");
@@ -717,14 +1280,18 @@ function renderImportanceChart(data) {
             datasets: [{
                 label: "Importance (%)",
                 data: data.map(d => d.importance),
-                backgroundColor: "#7C3AED",
-                borderRadius: 6,
+                backgroundColor: "#1F5D4C",
+                borderRadius: 5,
+                maxBarThickness: 26,
             }]
         },
         options: {
             indexAxis: "y",
             plugins: { legend: { display: false } },
-            scales: { x: { beginAtZero: true } }
+            scales: {
+                x: { beginAtZero: true, grid: { color: "#E3E8E4" }, ticks: { font: { family: CHART_FONT } } },
+                y: { grid: { display: false }, ticks: { font: { family: CHART_FONT } } }
+            }
         }
     });
 }
@@ -739,15 +1306,19 @@ function renderTrendChart(data) {
             datasets: [{
                 label: "Predicted price (₹)",
                 data: data.map(d => d.price),
-                borderColor: "#059669",
-                backgroundColor: "rgba(5,150,105,0.12)",
+                borderColor: "#B87F28",
+                backgroundColor: "rgba(184,127,40,0.12)",
                 fill: true,
                 tension: 0.3,
+                pointBackgroundColor: "#B87F28",
             }]
         },
         options: {
             plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: false } }
+            scales: {
+                y: { beginAtZero: false, grid: { color: "#E3E8E4" }, ticks: { font: { family: CHART_FONT } } },
+                x: { grid: { display: false }, ticks: { font: { family: CHART_FONT } } }
+            }
         }
     });
 }
