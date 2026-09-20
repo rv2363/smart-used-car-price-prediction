@@ -601,6 +601,29 @@
     .spec-strip__item[data-tone="fair"] p { color: var(--brass-deep); }
     .spec-strip__item[data-tone="bad"] p { color: var(--red-deep); }
 
+    .margin-note {
+        margin: 0.7rem 0 0;
+        padding: 0.6rem 0.9rem;
+        border-radius: 8px;
+        background: var(--brass-soft);
+        color: var(--brass-deep);
+        font-size: 0.82rem;
+        text-align: center;
+    }
+
+    .breakdown-note {
+        margin: 0.7rem 0 0;
+        padding: 0.6rem 0.9rem;
+        border-radius: 8px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        color: var(--ink-soft);
+        font-size: 0.8rem;
+        text-align: center;
+    }
+
+    .breakdown-note strong { color: var(--ink); font-weight: 700; }
+
     .confidence-row {
         margin-top: 0.9rem;
         border: 1px solid var(--line);
@@ -832,6 +855,14 @@
                     </select>
                 </div>
 
+                <div class="field">
+                    <label for="had_accident">Accident history</label>
+                    <select id="had_accident" name="had_accident">
+                        <option value="no">No accidents</option>
+                        <option value="yes">Yes, has had an accident</option>
+                    </select>
+                </div>
+
             </div>
             </div>
 
@@ -884,7 +915,7 @@
                 <p id="fairPrice">₹0</p>
             </div>
             <div class="spec-strip__item" id="depreciationItem">
-                <h4>Depreciation</h4>
+                <h4 id="depreciationLabel">Depreciation</h4>
                 <p id="depreciation">0%</p>
             </div>
             <div class="spec-strip__item" id="statusItem">
@@ -892,6 +923,12 @@
                 <p id="status">Fair</p>
             </div>
         </div>
+
+        <p class="margin-note" id="depreciationMargin" hidden>
+            This gap is smaller than the model's typical margin of error — close enough to call it the same price.
+        </p>
+
+        <p class="breakdown-note" id="depreciationBreakdown" hidden></p>
 
         <div class="confidence-row">
             <h4>Confidence range</h4>
@@ -1190,8 +1227,51 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
         }
 
         if (result.depreciation !== undefined) {
-            document.getElementById("depreciation").innerText =
-                Number(result.depreciation).toFixed(1) + "%";
+            const dep = Number(result.depreciation);
+            const label = document.getElementById("depreciationLabel");
+            const value = document.getElementById("depreciation");
+            const originalPrice = Number(result.summary && result.summary.original_price);
+
+            if (!originalPrice) {
+                label.textContent = "Depreciation";
+                value.textContent = "—";
+            } else if (dep >= 0) {
+                // Predicted price is below what was paid - genuine depreciation.
+                label.textContent = "Depreciation";
+                value.textContent = "↓ " + dep.toFixed(1) + "%";
+            } else {
+                // Predicted price is above what was paid. A negative number next
+                // to the word "Depreciation" reads as a bug, not as good news -
+                // so this gets its own label instead of a confusing minus sign.
+                label.textContent = "Above original price";
+                value.textContent = "↑ " + Math.abs(dep).toFixed(1) + "%";
+            }
+
+            // If the gap is smaller than the model's own average error, the
+            // honest read is "statistically the same price," not a real
+            // increase or decrease - say so instead of implying precision
+            // the model doesn't have.
+            const diffRupees = Math.abs(Number(result.predicted_price) - originalPrice);
+            const marginNote = document.getElementById("depreciationMargin");
+            if (originalPrice && result.model_mae && diffRupees < Number(result.model_mae)) {
+                marginNote.hidden = false;
+            } else {
+                marginNote.hidden = true;
+            }
+
+            // Show the age / usage / accident breakdown behind the
+            // depreciation ceiling, so the number isn't a black box.
+            const breakdownNote = document.getElementById("depreciationBreakdown");
+            const b = result.depreciation_breakdown;
+            if (b) {
+                const parts = [`Age <strong>${b.age_pct}%</strong>`];
+                if (b.km_pct > 0) parts.push(`Usage <strong>${b.km_pct}%</strong>`);
+                if (b.accident_pct > 0) parts.push(`Accident <strong>${b.accident_pct}%</strong>`);
+                breakdownNote.innerHTML = "Depreciation breakdown — " + parts.join(" · ");
+                breakdownNote.hidden = false;
+            } else {
+                breakdownNote.hidden = true;
+            }
         }
 
         if (result.status) {
