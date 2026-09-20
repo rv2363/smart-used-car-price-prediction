@@ -272,6 +272,68 @@ def get_request_data():
     return request.get_json(silent=True) or {}
 
 
+# ============================================================
+# SERVER-SIDE VALIDATION
+# ------------------------------------------------------------
+# The HTML form already constrains most of these (min/max/required),
+# but that only protects the browser UI - a direct POST to /predict
+# (curl, Postman, a modified client) bypasses it entirely. This is
+# the real backstop, and it returns a clear, specific message instead
+# of a raw exception or a silently wrong prediction.
+# ============================================================
+
+MIN_MANUFACTURING_YEAR = 1980
+
+
+def validate_inputs(inputs):
+    errors = []
+    current_year = datetime.now().year
+
+    if not inputs["make"]:
+        errors.append("Make / brand is required.")
+    if not inputs["model_name"]:
+        errors.append("Model is required.")
+    if not inputs["city"]:
+        errors.append("City is required.")
+    if not inputs["fuel_type"]:
+        errors.append("Fuel type is required.")
+    if not inputs["transmission"]:
+        errors.append("Transmission is required.")
+
+    yr = inputs["manufacturing_year"]
+    if not yr or yr < MIN_MANUFACTURING_YEAR or yr > current_year + 1:
+        errors.append(
+            f"Manufacturing year must be between {MIN_MANUFACTURING_YEAR} and {current_year + 1}."
+        )
+
+    if inputs["kms_driven"] < 0:
+        errors.append("Kilometers driven cannot be negative.")
+
+    if inputs["original_price"] < 0:
+        errors.append("Original price cannot be negative.")
+
+    if inputs["total_owners"] and inputs["total_owners"] < 1:
+        errors.append("Total owners must be at least 1.")
+
+    return errors
+
+
+# ============================================================
+# GENERAL BUYING ADVICE
+# ------------------------------------------------------------
+# Static, honest guidance shown alongside every prediction - the
+# model gives one estimate from historical listings, not a verdict,
+# so this keeps that context in front of the user every time.
+# ============================================================
+
+GENERAL_ADVICE = [
+    "Compare a few similar listings before deciding - this is one estimate, not the only data point.",
+    "If the asking price is above the estimated range, use that gap as a starting point to negotiate.",
+    "Always verify service history, accident history, and get an independent mechanic's inspection.",
+    "Don't make a purchase decision based on this prediction alone.",
+]
+
+
 def set_categorical_feature(row, prefix, value):
     """
     Looks up the exact trained one-hot column for this raw value using
@@ -589,6 +651,20 @@ def predict():
             "had_accident": to_bool(form.get("had_accident")),
         }
 
+        # ----------------------------------------------------
+        # VALIDATION
+        # Reject bad input with a specific, user-facing message
+        # before it ever reaches the model - never a raw traceback.
+        # ----------------------------------------------------
+
+        validation_errors = validate_inputs(inputs)
+        if validation_errors:
+            return jsonify({
+                "success": False,
+                "error": " ".join(validation_errors),
+                "errors": validation_errors,
+            }), 400
+
         print("\nParsed input:", {
             "make": inputs["make"], "model": inputs["model_name"],
             "yr_mfr": inputs["manufacturing_year"], "kms_run": inputs["kms_driven"],
@@ -711,6 +787,8 @@ def predict():
             "scrap_recommended": age_years >= SCRAP_AGE_YEARS,
             "scrap_message": scrap_message,
 
+            "advice": GENERAL_ADVICE,
+
             "status": valuation_status,
             "valuation_status": valuation_status,
 
@@ -757,4 +835,10 @@ if __name__ == "__main__":
     print("Smart Used Car Valuation System")
     print("======================================")
 
-    app.run(debug=True, port=5000)
+    # Debug is OFF by default - opt in locally with FLASK_DEBUG=true.
+    # Render (or any gunicorn deployment) never runs this block at all;
+    # gunicorn imports `app` directly (e.g. `gunicorn app:app`), so this
+    # is purely for `python app.py` local runs.
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=debug_mode, host="0.0.0.0", port=port)
