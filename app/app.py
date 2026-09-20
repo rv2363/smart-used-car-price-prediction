@@ -387,6 +387,78 @@ def predict_price(row):
     return max(price, 0), X_input
 
 
+# ============================================================
+# DETERMINISTIC DEPRECIATION CEILING
+# ------------------------------------------------------------
+# The trained model has no concept of "must be worth less than
+# what was paid" - it just pattern-matches from historical listings,
+# so it can (correctly, statistically) land within its own margin
+# of error on either side of the original price. To guarantee the
+# business rule "a used car is always valued below its original
+# price, and more so with age / km / accidents", this layer computes
+# an independent, rule-based ceiling and takes whichever of the
+# model's prediction or this ceiling is LOWER. It never overrides the
+# model upward - only ever caps it downward.
+# ============================================================
+
+EXPECTED_KM_PER_YEAR = 12000       # "normal" usage assumption
+MAX_TOTAL_DEPRECIATION = 0.75      # never value a car below 25% of original
+ACCIDENT_PENALTY = 0.15            # flat extra cut for accident history
+
+
+def compute_depreciation_breakdown(age_years, kms_driven, had_accident):
+    """Returns (total_fraction, breakdown_dict). total_fraction is how
+    much value is cut from the original price - e.g. 0.32 = 32% down."""
+
+    age_years = max(age_years, 0)
+
+    # Year-wise: cars typically lose the most value in year 1, then a
+    # smaller, fairly steady percentage each year after that.
+    if age_years <= 0:
+        age_pct = 0.05
+    else:
+        age_pct = 0.18 + 0.10 * (age_years - 1)
+    age_pct = min(age_pct, 0.65)
+
+    # Km-wise: extra depreciation only for driving MORE than the
+    # "expected" km for the car's age (12,000 km/year assumption).
+    # Every 10,000 km of excess usage knocks off another 1.5%, capped.
+    expected_km = EXPECTED_KM_PER_YEAR * max(age_years, 1)
+    excess_km = max(0.0, (kms_driven or 0) - expected_km)
+    km_pct = min(0.20, (excess_km / 10000) * 0.015)
+
+    # Accident history: flat penalty on top, since damage/repair
+    # history affects resale value regardless of age or mileage.
+    accident_pct = ACCIDENT_PENALTY if had_accident else 0.0
+
+    total_pct = min(MAX_TOTAL_DEPRECIATION, age_pct + km_pct + accident_pct)
+
+    return total_pct, {
+        "age_pct": round(age_pct * 100, 1),
+        "km_pct": round(km_pct * 100, 1),
+        "accident_pct": round(accident_pct * 100, 1),
+        "total_pct": round(total_pct * 100, 1),
+    }
+
+
+def apply_depreciation_ceiling(raw_predicted_price, original_price, age_years, kms_driven, had_accident):
+    """Caps the model's raw prediction so it can never exceed the
+    rule-based depreciation ceiling. Returns (final_price, breakdown)."""
+
+    total_pct, breakdown = compute_depreciation_breakdown(age_years, kms_driven, had_accident)
+
+    if original_price and original_price > 0:
+        ceiling_price = original_price * (1 - total_pct)
+        final_price = min(raw_predicted_price, ceiling_price)
+    else:
+        # No original price to cap against - still apply the accident
+        # penalty directly to the model's own number, since a real
+        # accident should reduce value regardless of a reference price.
+        final_price = raw_predicted_price * (1 - (ACCIDENT_PENALTY if had_accident else 0.0))
+
+    return max(final_price, 0), breakdown
+
+
 def find_similar_cars(inputs, limit=5):
     """Looks up real listings from the training CSV that are close to
     the entered car - same make (if enough exist), similar year and km."""
@@ -436,16 +508,27 @@ def find_similar_cars(inputs, limit=5):
 def build_price_trend(inputs, span=8):
     """Holds everything fixed except manufacturing year, and predicts
     the price at each year in the last `span` years - shows the
-    depreciation curve for this exact car."""
+    depreciation curve for this exact car. Each point goes through the
+    same depreciation ceiling as the main prediction, so the curve is
+    a real downward depreciation slope rather than raw (and sometimes
+    noisy) model output."""
 
     current_year = datetime.now().year
+    original_price = inputs.get("original_price", 0)
+    had_accident = bool(inputs.get("had_accident", 0))
+
     trend = []
     for yr in range(current_year - span + 1, current_year + 1):
         trial_inputs = dict(inputs)
         trial_inputs["manufacturing_year"] = yr
         row = build_feature_row(trial_inputs)
-        price, _ = predict_price(row)
-        trend.append({"year": yr, "price": round(price, 2)})
+        raw_price, _ = predict_price(row)
+
+        trial_age = max(current_year - yr, 0)
+        final_price, _ = apply_depreciation_ceiling(
+            raw_price, original_price, trial_age, inputs.get("kms_driven", 0), had_accident
+        )
+        trend.append({"year": yr, "price": round(final_price, 2)})
     return trend
 
 
@@ -501,6 +584,7 @@ def predict():
             "reserved": to_bool(form.get("reserved")),
             "warranty_avail": to_bool(form.get("warranty_avail", form.get("warranty_available"))),
             "times_viewed": to_float(form.get("times_viewed")),
+            "had_accident": to_bool(form.get("had_accident")),
         }
 
         print("\nParsed input:", {
@@ -517,7 +601,7 @@ def predict():
         # ----------------------------------------------------
 
         row = build_feature_row(inputs)
-        predicted_price, X_input = predict_price(row)
+        raw_predicted_price, X_input = predict_price(row)
 
         # Sanity check while you're debugging: how many features
         # actually ended up non-zero? If this number stays tiny no
@@ -526,6 +610,24 @@ def predict():
         nonzero = int((X_input.iloc[0] != 0).sum())
         print("Prediction input created")
         print("Feature count:", X_input.shape[1], "| non-zero features:", nonzero)
+
+        # ----------------------------------------------------
+        # DEPRECIATION CEILING (age + km + accident)
+        # Guarantees the final number is always at or below what the
+        # rule-based depreciation curve says the car should be worth -
+        # never above the model's own raw number, only ever capped down.
+        # ----------------------------------------------------
+
+        current_year = datetime.now().year
+        age_years = max(current_year - int(inputs["manufacturing_year"]), 0) if inputs["manufacturing_year"] else 0
+
+        predicted_price, depreciation_breakdown = apply_depreciation_ceiling(
+            raw_predicted_price,
+            inputs["original_price"],
+            age_years,
+            inputs["kms_driven"],
+            bool(inputs["had_accident"]),
+        )
 
         # ----------------------------------------------------
         # FAIR PRICE RANGE
@@ -579,6 +681,8 @@ def predict():
                 (1 - (predicted_price / original_price)) * 100, 1
             ) if original_price else 0,
 
+            "depreciation_breakdown": depreciation_breakdown,
+
             "status": valuation_status,
             "valuation_status": valuation_status,
 
@@ -596,7 +700,8 @@ def predict():
                 "kms_driven": inputs["kms_driven"],
                 "total_owners": inputs["total_owners"],
                 "city": inputs["city"],
-                "original_price": original_price
+                "original_price": original_price,
+                "had_accident": bool(inputs["had_accident"]),
             }
         }
 
