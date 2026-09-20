@@ -36,6 +36,45 @@
 
     * { box-sizing: border-box; }
 
+    /* ============================= NAVBAR ============================= */
+    .navbar {
+        background: var(--ink);
+        border-bottom: 1px solid rgba(234, 241, 236, 0.1);
+    }
+
+    .navbar__inner {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0.9rem 1.6rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .navbar__brand { display: flex; align-items: center; gap: 0.6rem; }
+    .navbar__logo { font-size: 1.3rem; }
+    .navbar__title { color: #EAF1EC; font-weight: 700; font-size: 0.92rem; font-family: var(--font-display); }
+    .navbar__tagline { color: #93A79C; font-size: 0.74rem; }
+
+    .navbar__links { display: flex; gap: 1.4rem; }
+    .navbar__links a { margin-right: 1.4rem; }
+    .navbar__links a:last-child { margin-right: 0; }
+    .navbar__links a {
+        color: #C7D6CC;
+        text-decoration: none;
+        font-size: 0.86rem;
+        font-weight: 600;
+        transition: color 0.15s ease;
+    }
+    .navbar__links a:hover { color: #fff; }
+
+    @media (max-width: 600px) {
+        .navbar__inner { justify-content: center; text-align: center; }
+        .navbar__links { gap: 1rem; }
+    }
+
     body {
         margin: 0;
         font-family: var(--font-body);
@@ -222,6 +261,52 @@
     @media (max-width: 760px) {
         .hero__inner { grid-template-columns: 1fr; }
         .hero__dial-panel { justify-self: center; max-width: 190px; }
+    }
+
+    /* ============================= HOW IT WORKS ============================= */
+    .how-it-works {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.2rem;
+        margin: 1.6rem 0 1.8rem;
+    }
+
+    .how-it-works__step {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 1.2rem 1.3rem;
+    }
+
+    .how-it-works__num {
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--green-soft);
+        color: var(--green-deep);
+        font-family: var(--font-display);
+        font-weight: 700;
+        font-size: 0.85rem;
+        margin-bottom: 0.6rem;
+    }
+
+    .how-it-works__step h3 {
+        font-size: 0.96rem;
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+    }
+
+    .how-it-works__step p {
+        font-size: 0.84rem;
+        color: var(--ink-soft);
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    @media (max-width: 760px) {
+        .how-it-works { grid-template-columns: 1fr; }
     }
 
     /* ============================= LAYOUT ============================= */
@@ -420,6 +505,17 @@
     .btn-secondary:hover .btn-icon--ghost { background: var(--green); color: #fff; }
 
     .btn-secondary:active { transform: translateY(0); }
+
+    .form-error {
+        margin-bottom: 1.4rem;
+        padding: 0.8rem 1rem;
+        border-radius: 10px;
+        background: var(--red-soft);
+        border: 1px solid #EBC3BC;
+        color: var(--red-deep);
+        font-size: 0.88rem;
+        line-height: 1.5;
+    }
 
     form > .btn-primary { margin-top: 2rem; }
 
@@ -643,6 +739,12 @@
         font-weight: 700;
         font-family: var(--font-display);
     }
+    .confidence-row__note {
+        display: block;
+        margin-top: 0.4rem;
+        font-size: 0.75rem;
+        color: var(--ink-soft);
+    }
 
     .recommendation {
         margin-top: 1.4rem;
@@ -678,6 +780,58 @@
     .scrap-notice svg { width: 22px; height: 22px; flex-shrink: 0; margin-top: 0.1rem; }
     .scrap-notice p { margin: 0; font-size: 0.9rem; line-height: 1.5; }
 
+    .advice-list {
+        list-style: none;
+        margin: 1rem 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+    }
+
+    .advice-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6rem;
+        font-size: 0.86rem;
+        color: var(--ink-soft);
+        line-height: 1.5;
+    }
+
+    .advice-list li::before {
+        content: "";
+        flex-shrink: 0;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--brass);
+        margin-top: 0.5em;
+    }
+
+    .vehicle-summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.9rem 1.2rem;
+        margin-bottom: 1.3rem;
+    }
+
+    .vehicle-summary__item {
+        font-size: 0.86rem;
+    }
+
+    .vehicle-summary__item span {
+        display: block;
+        font-size: 0.74rem;
+        color: var(--ink-soft);
+        margin-bottom: 0.15rem;
+    }
+
+    .vehicle-summary__item strong { color: var(--ink); font-weight: 700; }
+
+    @media (max-width: 680px) {
+        .vehicle-summary { grid-template-columns: repeat(2, 1fr); }
+    }
+
     /* ============================= TABLE ============================= */
     table.similar-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
     table.similar-table th {
@@ -710,17 +864,84 @@
 
     .footer p { margin: 0.3rem 0 0; font-size: 0.78rem; }
 
+    .about-model__intro {
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: var(--ink);
+    }
+
+    .metric-strip {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin: 1.2rem 0;
+    }
+
+    .metric-strip__item {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 1.1rem 1.2rem;
+    }
+
+    .metric-strip__item h4 {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--ink-soft);
+        margin: 0 0 0.3rem;
+    }
+
+    .metric-strip__item p {
+        font-family: var(--font-display);
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--green-deep);
+        margin: 0 0 0.4rem;
+    }
+
+    .metric-strip__item span {
+        font-size: 0.8rem;
+        color: var(--ink-soft);
+        line-height: 1.5;
+    }
+
+    .about-model__disclaimer {
+        font-size: 0.85rem;
+        color: var(--ink-soft);
+        line-height: 1.6;
+        padding-top: 1rem;
+        border-top: 1px dashed var(--line);
+        margin: 0;
+    }
+
     @media (max-width: 680px) {
         .form-grid { grid-template-columns: 1fr; }
         .spec-strip { grid-template-columns: 1fr; }
         .spec-strip__item { border-left: none; border-top: 1px solid var(--line); }
         .spec-strip__item:first-child { border-top: none; }
         .sheet, .result { padding: 1.7rem 1.3rem 2rem; }
+        .metric-strip { grid-template-columns: 1fr; }
     }
 </style>
 </head>
 
 <body>
+
+<nav class="navbar" id="home">
+    <div class="navbar__inner">
+        <div class="navbar__brand">
+            <span class="navbar__logo">🚘</span>
+            <div>
+                <div class="navbar__title">Smart Used Car Valuation</div>
+                <div class="navbar__tagline">AI-Powered Used Car Valuation</div>
+            </div>
+        </div>
+        <div class="navbar__links">
+            <a href="#home">Home</a>
+            <a href="#how-it-works">How It Works</a>
+            <a href="#about-model">About Model</a>
+        </div>
+    </div>
+</nav>
 
 <div class="hero">
     <div class="hero__grid" aria-hidden="true"></div>
@@ -753,9 +974,30 @@
 
 <div class="container">
 
+    <div class="how-it-works" id="how-it-works">
+        <div class="how-it-works__step">
+            <span class="how-it-works__num">1</span>
+            <h3>Enter your car's details</h3>
+            <p>Make, model, year, mileage, and a few listing details — takes under a minute.</p>
+        </div>
+        <div class="how-it-works__step">
+            <span class="how-it-works__num">2</span>
+            <h3>The model analyzes it</h3>
+            <p>An XGBoost model trained on thousands of real listings estimates a market price, then a depreciation check adjusts for age, usage, and accident history.</p>
+        </div>
+        <div class="how-it-works__step">
+            <span class="how-it-works__num">3</span>
+            <h3>Get an estimated range</h3>
+            <p>A predicted price, an estimated range around it, and a plain-language recommendation — not a guaranteed sale price.</p>
+        </div>
+    </div>
+
     <div class="sheet">
 
         <form id="predictionForm">
+
+            <div class="form-error" id="formError" hidden></div>
+
 
             <h2 class="group-title">
                 <span class="badge">
@@ -946,8 +1188,9 @@
         <p class="breakdown-note" id="depreciationBreakdown" hidden></p>
 
         <div class="confidence-row">
-            <h4>Confidence range</h4>
+            <h4>Estimated market range</h4>
             <p id="confidenceRange">₹0 – ₹0</p>
+            <span class="confidence-row__note" id="marginErrorNote"></span>
         </div>
 
         <div class="recommendation" id="recommendation" data-tone="fair">
@@ -958,6 +1201,18 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 19h20L12 2Z"/><path d="M12 9v5M12 17h.01"/></svg>
             <p id="scrapMessage"></p>
         </div>
+
+        <ul class="advice-list" id="adviceList"></ul>
+
+        <!-- ======= PRICE ANALYSIS ======= -->
+        <h2 class="group-title">
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M12 8v8"/></svg>
+            </span>
+            Price analysis
+        </h2>
+        <div class="vehicle-summary" id="vehicleSummary"></div>
+        <canvas id="comparisonChart" height="140"></canvas>
 
         <!-- ======= FEATURE IMPORTANCE ======= -->
         <h2 class="group-title">
@@ -1041,6 +1296,42 @@
 
     </div>
 
+</div>
+
+<div class="container">
+    <div class="sheet about-model" id="about-model">
+        <h2 class="group-title">
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>
+            </span>
+            About the model
+        </h2>
+
+        <p class="about-model__intro">
+            This tool uses an <strong>XGBoost regression model</strong> trained on 7,396 cleaned real used-car
+            listings, using 76 engineered features (make, model, age, mileage, location, and more).
+        </p>
+
+        <div class="metric-strip">
+            <div class="metric-strip__item">
+                <h4>R² score</h4>
+                <p>0.93</p>
+                <span>Roughly 93% of the price variation in the training data is explained by the model's features. Closer to 1.0 is better.</span>
+            </div>
+            <div class="metric-strip__item">
+                <h4>Mean Absolute Error</h4>
+                <p>₹40,997</p>
+                <span>On average, the model's prediction is off by about this much in either direction, based on historical test data.</span>
+            </div>
+        </div>
+
+        <p class="about-model__disclaimer">
+            <strong>This is an estimate, not a guaranteed selling price.</strong> Real-world prices depend on
+            negotiation, condition, urgency, and local demand that a model trained on historical listings can't
+            fully capture. Use it as one input alongside an inspection, service history check, and comparison
+            with similar live listings.
+        </p>
+    </div>
 </div>
 
 <div class="footer">
@@ -1216,6 +1507,11 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
         data[key] = value;
     });
 
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const errorBanner = document.getElementById("formError");
+    errorBanner.hidden = true;
+    submitBtn.disabled = true;
+
     startLoadingMeter();
 
     try {
@@ -1238,11 +1534,15 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
         stopLoadingMeter();
 
         if (!response.ok) {
-            alert(result.error || "Prediction failed");
+            errorBanner.textContent = result.error || "Prediction failed. Please check the input values.";
+            errorBanner.hidden = false;
+            errorBanner.scrollIntoView({ behavior: "smooth", block: "center" });
             return;
         }
 
         document.getElementById("result").style.display = "block";
+        window.__lastResult = result;
+
 
         document.getElementById("predictedPrice").innerText =
             "₹" + Number(result.predicted_price).toLocaleString("en-IN");
@@ -1324,11 +1624,16 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
             scrapNotice.hidden = true;
         }
 
-        // ---- Confidence range ----
-        if (result.confidence_low !== undefined) {
+        // ---- Estimated market range (±10% band, not a statistical CI) ----
+        if (result.fair_price_low !== undefined) {
             document.getElementById("confidenceRange").innerText =
-                "₹" + Number(result.confidence_low).toLocaleString("en-IN") +
-                " – ₹" + Number(result.confidence_high).toLocaleString("en-IN");
+                "₹" + Number(result.fair_price_low).toLocaleString("en-IN") +
+                " – ₹" + Number(result.fair_price_high).toLocaleString("en-IN");
+        }
+        if (result.model_mae !== undefined) {
+            document.getElementById("marginErrorNote").textContent =
+                "Model's typical error on past listings: ± ₹" + Number(result.model_mae).toLocaleString("en-IN") +
+                " (a historical average, not a statistical confidence interval)";
         }
 
         // ---- Feature importance chart ----
@@ -1357,6 +1662,23 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
             renderTrendChart(result.price_trend);
         }
 
+        // ---- General advice checklist ----
+        if (result.advice && result.advice.length) {
+            const list = document.getElementById("adviceList");
+            list.innerHTML = "";
+            result.advice.forEach(tip => {
+                const li = document.createElement("li");
+                li.textContent = tip;
+                list.appendChild(li);
+            });
+        }
+
+        // ---- Vehicle summary + original vs predicted comparison ----
+        if (result.summary) {
+            renderVehicleSummary(result.summary, result.predicted_price);
+            renderComparisonChart(result.summary.original_price, result.predicted_price);
+        }
+
         // ---- Store predicted price for EMI calculator ----
         window.__lastPredictedPrice = Number(result.predicted_price);
 
@@ -1373,9 +1695,13 @@ document.getElementById("predictionForm").addEventListener("submit", async funct
 
         stopLoadingMeter();
 
-        alert("Unable to connect with Flask server.");
+        errorBanner.textContent = "Unable to connect to the server. Please check your connection and try again.";
+        errorBanner.hidden = false;
 
         console.error(error);
+    } finally {
+
+        submitBtn.disabled = false;
     }
 
 });
@@ -1438,6 +1764,66 @@ function renderTrendChart(data) {
     });
 }
 
+// ---- Vehicle summary (Price Analysis section) ----
+let comparisonChartInstance = null;
+
+function renderVehicleSummary(summary, predictedPrice) {
+    const currentYear = new Date().getFullYear();
+    const age = summary.manufacturing_year ? Math.max(currentYear - Number(summary.manufacturing_year), 0) : "—";
+
+    const items = [
+        { label: "Vehicle age", value: age !== "—" ? age + (age === 1 ? " year" : " years") : "—" },
+        { label: "Kilometers driven", value: summary.kms_driven ? Number(summary.kms_driven).toLocaleString("en-IN") + " km" : "—" },
+        { label: "City", value: summary.city ? summary.city.charAt(0).toUpperCase() + summary.city.slice(1) : "—" },
+        { label: "Total owners", value: summary.total_owners || "—" },
+        { label: "Original price", value: summary.original_price ? "₹" + Number(summary.original_price).toLocaleString("en-IN") : "Not provided" },
+        { label: "Accident history", value: summary.had_accident ? "Yes" : "No" },
+    ];
+
+    const container = document.getElementById("vehicleSummary");
+    container.innerHTML = items.map(item =>
+        `<div class="vehicle-summary__item"><span>${item.label}</span><strong>${item.value}</strong></div>`
+    ).join("");
+}
+
+function renderComparisonChart(originalPrice, predictedPrice) {
+    const ctx = document.getElementById("comparisonChart");
+    if (comparisonChartInstance) comparisonChartInstance.destroy();
+
+    const hasOriginal = originalPrice && Number(originalPrice) > 0;
+    const labels = hasOriginal ? ["Original price", "Predicted price"] : ["Predicted price"];
+    const values = hasOriginal ? [Number(originalPrice), Number(predictedPrice)] : [Number(predictedPrice)];
+    const colors = hasOriginal ? ["#B87F28", "#1F5D4C"] : ["#1F5D4C"];
+
+    comparisonChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels,
+            datasets: [{
+                data: values,
+                backgroundColor: colors,
+                borderRadius: 6,
+                maxBarThickness: 60,
+            }]
+        },
+        options: {
+            indexAxis: "y",
+            plugins: { legend: { display: false } },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    grid: { color: "#E3E8E4" },
+                    ticks: {
+                        font: { family: CHART_FONT },
+                        callback: (v) => "₹" + Number(v).toLocaleString("en-IN"),
+                    },
+                },
+                y: { grid: { display: false }, ticks: { font: { family: CHART_FONT } } }
+            }
+        }
+    });
+}
+
 // ---- EMI calculator ----
 document.getElementById("calcEmiBtn").addEventListener("click", () => {
     const price = window.__lastPredictedPrice || 0;
@@ -1466,19 +1852,111 @@ document.getElementById("calcEmiBtn").addEventListener("click", () => {
 
 // ---- PDF download ----
 document.getElementById("downloadPdfBtn").addEventListener("click", async () => {
-    const resultEl = document.getElementById("result");
-    const canvas = await html2canvas(resultEl, { scale: 2 });
-    const imgData = canvas.toDataURL("image/png");
+    const result = window.__lastResult;
+    if (!result) return;
 
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF("p", "mm", "a4");
     const pageWidth = pdf.internal.pageSize.getWidth();
-    const imgWidth = pageWidth - 20;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const marginX = 14;
+    let y = 18;
 
-    pdf.setFontSize(16);
-    pdf.text("Smart Used Car Valuation Report", 10, 12);
-    pdf.addImage(imgData, "PNG", 10, 18, imgWidth, imgHeight);
+    const fmtRupee = (v) => "Rs. " + Number(v || 0).toLocaleString("en-IN");
+    const line = (text, size = 10, bold = false, gap = 6) => {
+        pdf.setFontSize(size);
+        pdf.setFont(undefined, bold ? "bold" : "normal");
+        const wrapped = pdf.splitTextToSize(text, pageWidth - marginX * 2);
+        pdf.text(wrapped, marginX, y);
+        y += gap * wrapped.length;
+    };
+    const spacer = (h = 4) => { y += h; };
+    const rule = () => { pdf.setDrawColor(220); pdf.line(marginX, y, pageWidth - marginX, y); spacer(6); };
+
+    // ---- Header ----
+    line("Smart Used Car Valuation Report", 17, true, 8);
+    line("Generated: " + new Date().toLocaleString("en-IN"), 9, false, 5);
+    spacer(2);
+    rule();
+
+    // ---- Vehicle details ----
+    const s = result.summary || {};
+    line("Vehicle Details", 13, true, 7);
+    line(`Make / Model: ${s.make || "-"} ${s.model || ""}${s.variant ? " (" + s.variant + ")" : ""}`);
+    line(`Manufacturing year: ${s.manufacturing_year || "-"}`);
+    line(`Kilometers driven: ${s.kms_driven ? Number(s.kms_driven).toLocaleString("en-IN") + " km" : "-"}`);
+    line(`City: ${s.city || "-"}`);
+    line(`Total owners: ${s.total_owners || "-"}`);
+    line(`Accident history: ${s.had_accident ? "Yes" : "No"}`);
+    spacer(2);
+    rule();
+
+    // ---- Valuation ----
+    line("Valuation", 13, true, 7);
+    line(`Predicted market price: ${fmtRupee(result.predicted_price)}`, 11, true, 7);
+    if (result.fair_price_low !== undefined) {
+        line(`Estimated market range: ${fmtRupee(result.fair_price_low)} - ${fmtRupee(result.fair_price_high)}`);
+    }
+    if (s.original_price) {
+        const diff = Number(s.original_price) - Number(result.predicted_price);
+        const diffPct = ((diff / Number(s.original_price)) * 100).toFixed(1);
+        line(`Original price: ${fmtRupee(s.original_price)}`);
+        line(`Price difference: ${fmtRupee(Math.abs(diff))} (${diffPct}% ${diff >= 0 ? "below" : "above"} original)`);
+    } else {
+        line("Original price: not provided");
+    }
+    line(`Valuation status: ${result.status || "-"}`);
+    line(`Recommendation: ${result.recommendation || "-"}`);
+    spacer(2);
+    rule();
+
+    if (result.scrap_message) {
+        line("Environmental Notice", 13, true, 7);
+        line(result.scrap_message, 10, false, 5.5);
+        spacer(2);
+        rule();
+    }
+
+    // ---- General advice ----
+    if (result.advice && result.advice.length) {
+        line("General Advice", 13, true, 7);
+        result.advice.forEach(tip => line("- " + tip, 10, false, 5.5));
+        spacer(2);
+        rule();
+    }
+
+    // ---- About the model ----
+    line("About the Model", 13, true, 7);
+    line("Algorithm: XGBoost Regression, trained on 7,396 cleaned used-car listings (76 features).");
+    line("R-squared score: ~0.93  |  Mean Absolute Error: ~Rs. 40,997");
+    spacer(2);
+    rule();
+
+    // ---- Disclaimer ----
+    line("Disclaimer", 13, true, 7);
+    line(
+        "This report is an automated estimate based on historical listing data and general depreciation " +
+        "assumptions (age, mileage, accident history). It is not a guaranteed selling price. Always verify " +
+        "vehicle condition, service history, and compare live listings before making a decision.",
+        9, false, 5
+    );
+
+    // ---- Visual snapshot (gauge + charts) on a fresh page ----
+    try {
+        const resultEl = document.getElementById("result");
+        const canvas = await html2canvas(resultEl, { scale: 2 });
+        const imgData = canvas.toDataURL("image/png");
+        const imgWidth = pageWidth - marginX * 2;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        pdf.addPage();
+        pdf.setFontSize(13);
+        pdf.setFont(undefined, "bold");
+        pdf.text("Visual Summary", marginX, 16);
+        pdf.addImage(imgData, "PNG", marginX, 22, imgWidth, imgHeight);
+    } catch (err) {
+        console.error("Could not capture visual summary for PDF:", err);
+    }
+
     pdf.save("car-valuation-report.pdf");
 });
 
