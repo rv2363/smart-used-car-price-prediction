@@ -404,6 +404,8 @@ def predict_price(row):
 EXPECTED_KM_PER_YEAR = 12000       # "normal" usage assumption
 MAX_TOTAL_DEPRECIATION = 0.75      # never value a car below 25% of original
 ACCIDENT_PENALTY = 0.15            # flat extra cut for accident history
+SCRAP_AGE_YEARS = 15               # beyond this, recommend scrapping instead of resale
+SCRAP_VALUE_FRACTION = 0.05        # nominal scrap-metal value vs. original price
 
 
 def compute_depreciation_breakdown(age_years, kms_driven, had_accident):
@@ -630,20 +632,34 @@ def predict():
         )
 
         # ----------------------------------------------------
-        # FAIR PRICE RANGE
-        # ----------------------------------------------------
-
-        fair_low = predicted_price * 0.90
-
-        fair_high = predicted_price * 1.10
-
-        # ----------------------------------------------------
         # VALUATION STATUS
+        # (computed first since the scrap branch below can override
+        # predicted_price - the fair price range further down must use
+        # whichever value is final, not the pre-scrap one.)
         # ----------------------------------------------------
 
         original_price = inputs["original_price"]
+        scrap_message = None
 
-        if original_price and original_price < predicted_price * 0.90:
+        if age_years >= SCRAP_AGE_YEARS:
+            # Beyond the usual roadworthy lifespan, resale valuation isn't
+            # really the point anymore - point the user toward scrapping
+            # instead of dressing up a very old vehicle as a "fair deal".
+            predicted_price = round(
+                (original_price * SCRAP_VALUE_FRACTION) if original_price else predicted_price * SCRAP_VALUE_FRACTION,
+                2,
+            )
+            valuation_status = "SCRAP"
+            recommendation = "SCRAP"
+            scrap_message = (
+                f"This vehicle is {age_years} years old, past the {SCRAP_AGE_YEARS}-year mark where "
+                "resale value stops being the relevant question. For your safety, local air quality, "
+                "and the environment, please consider taking it to an authorized vehicle scrapping "
+                "facility (RVSF) instead of reselling it. Scrappage rules vary by state, so check your "
+                "local RTO for current norms and any incentive certificate you may be eligible for."
+            )
+
+        elif original_price and original_price < predicted_price * 0.90:
 
             valuation_status = "UNDERPRICED"
             recommendation = "BUY"
@@ -657,6 +673,15 @@ def predict():
 
             valuation_status = "FAIR"
             recommendation = "NEGOTIATE"
+
+        # ----------------------------------------------------
+        # FAIR PRICE RANGE
+        # (uses the final predicted_price, after any scrap override)
+        # ----------------------------------------------------
+
+        fair_low = predicted_price * 0.90
+
+        fair_high = predicted_price * 1.10
 
         # ----------------------------------------------------
         # RESPONSE
@@ -682,6 +707,9 @@ def predict():
             ) if original_price else 0,
 
             "depreciation_breakdown": depreciation_breakdown,
+
+            "scrap_recommended": age_years >= SCRAP_AGE_YEARS,
+            "scrap_message": scrap_message,
 
             "status": valuation_status,
             "valuation_status": valuation_status,
