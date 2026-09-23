@@ -1,844 +1,338 @@
+"""
+Smart Used Car Valuation - Flask app.
+
+All preprocessing lives inside models/car_price_pipeline.joblib (built by
+train.py), so this file only has to turn the form into a one-row DataFrame
+with the same raw columns the model was trained on.
+"""
+
+import json
 import os
+import sys
 import traceback
 from datetime import datetime
 
 import joblib
-import numpy as np
 import pandas as pd
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_FILE = os.path.join("models", "car_price_pipeline.joblib")
+META_FILE = os.path.join("models", "model_metadata.json")
 
 
-# ============================================================
-# PATHS
-# ============================================================
+def find_project_root():
+    """Return the repo root, i.e. the folder that contains models/.
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-
-MODEL_PATH = os.path.join(
-    PROJECT_ROOT, "models", "used_car_price_xgboost.pkl"
-)
-
-FEATURE_COLUMNS_PATH = os.path.join(
-    PROJECT_ROOT, "models", "feature_columns.pkl"
-)
-
-DATA_PATH = os.path.join(
-    PROJECT_ROOT, "data", "Used_Car_Price_Prediction_Cleaned.csv"
-)
+    Works whether app.py lives in the repo root (repo/app.py) or in a
+    subfolder (repo/app/app.py), so the same file runs locally and on
+    Render without any hardcoded paths.
+    """
+    candidates = [APP_DIR, os.path.dirname(APP_DIR), os.getcwd()]
+    for folder in candidates:
+        if os.path.isfile(os.path.join(folder, MODEL_FILE)):
+            return folder
+    raise FileNotFoundError(
+        f"Could not find {MODEL_FILE}. Looked in: " + ", ".join(candidates)
+        + ". Make sure the models/ folder is committed to the repository."
+    )
 
 
-# ============================================================
-# FLASK APP
-# ============================================================
-
-app = Flask(__name__)
-
-
-# ============================================================
-# LOAD MODEL
-# ============================================================
-
-print("Loading XGBoost model...")
-
-model = joblib.load(MODEL_PATH)
-feature_columns = list(joblib.load(FEATURE_COLUMNS_PATH))
-
-print("Model loaded successfully!")
-print("Expected features:", len(feature_columns))
-
-# Model's own reported error from your notebook - used to draw a
-# confidence / uncertainty band around the predicted price.
-# Update this if you retrain and get a different MAE.
-MODEL_MAE = 40996.51
+def find_template_dir(root):
+    """templates/ may sit next to app.py or inside app/."""
+    for folder in [os.path.join(APP_DIR, "templates"),
+                   os.path.join(root, "app", "templates"),
+                   os.path.join(root, "templates")]:
+        if os.path.isfile(os.path.join(folder, "index.html")):
+            return folder
+    raise FileNotFoundError("Could not find templates/index.html next to app.py or in app/templates/.")
 
 
-# ============================================================
-# LOAD TRAINING DATA
-# ============================================================
+PROJECT_ROOT = find_project_root()
+MODEL_PATH = os.path.join(PROJECT_ROOT, MODEL_FILE)
+META_PATH = os.path.join(PROJECT_ROOT, META_FILE)
 
-df_train = pd.read_csv(DATA_PATH)
+# train.py lives in the repo root; make sure it's importable from any layout.
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-print("Training data loaded:", df_train.shape)
+from train import CATEGORICAL, FEATURES, MISSING, load_and_clean  # noqa: E402
 
-# Which column in the raw CSV holds the actual sale price - needed for
-# the "similar cars" lookup. Adjust this list if your CSV uses a
-# different name for the target variable.
-TARGET_COLUMN = None
-for candidate in ["sale_price", "price", "selling_price", "original_price"]:
-    if candidate in df_train.columns:
-        TARGET_COLUMN = candidate
-        break
+app = Flask(__name__, template_folder=find_template_dir(PROJECT_ROOT))
+print(f"Project root: {PROJECT_ROOT}")
 
+# ------------------------------------------------------------------
+# Load model, metadata and reference data once at startup
+# ------------------------------------------------------------------
 
-# ============================================================
-# CATEGORICAL FEATURE MAPPING (built once at startup)
-# ------------------------------------------------------------
-# The old approach guessed how pd.get_dummies() named each one-hot
-# column (value, value.title(), value.upper(), value_with_underscores)
-# and used whichever guess happened to exist in feature_columns. If the
-# real training data used a casing/spacing convention that didn't match
-# any of those guesses, the feature silently stayed at 0 - no error,
-# just a categorical input the model never actually saw.
-#
-# This was the main cause of predictions barely reacting to make,
-# fuel type, body type, transmission, city, rating, etc.: those inputs
-# were mostly landing on nothing, leaving the model to lean almost
-# entirely on the numeric features (especially original_price).
-#
-# Fix: look at the ACTUAL raw values that existed in the training CSV
-# for each categorical column, and match them directly against
-# feature_columns. This guarantees a correct match regardless of the
-# casing/spacing convention used when the model was trained.
-# ============================================================
+pipeline = joblib.load(MODEL_PATH)
+with open(META_PATH) as f:
+    META = json.load(f)
 
-CATEGORICAL_RAW_COLUMNS = [
-    "fuel_type", "city", "body_type", "transmission",
-    "source", "make", "car_availability", "car_rating",
+OPTIONS = META["options"]
+MAX_CAR_AGE = OPTIONS["max_car_age"]
+BAND_LOW = META["error_band"]["low_ratio"]
+BAND_HIGH = META["error_band"]["high_ratio"]
+MODEL_MAE = META["test_metrics"]["mae"]
+
+# Cleaned listings, used for the "similar cars" table.
+df_ref = load_and_clean()
+df_ref["yr_mfr"] = df_ref["yr_mfr"].astype(int)
+
+print(f"Loaded {META['model_name']} | test R2 {META['test_metrics']['r2']} "
+      f"| MAE Rs {MODEL_MAE:,.0f} | {len(df_ref)} reference listings")
+
+# ------------------------------------------------------------------
+# Business rules (clearly separate from the ML model)
+# ------------------------------------------------------------------
+
+# The dataset has no accident information, so the model can't learn this.
+# A flat, disclosed rule-of-thumb is applied instead.
+ACCIDENT_ADJUSTMENT = 0.15
+SCRAP_AGE_YEARS = 15
+MIN_YEAR = 1990
+
+FEATURE_LABELS = {
+    "make": "Brand", "model": "Model", "variant": "Variant",
+    "fuel_type": "Fuel type", "transmission": "Transmission",
+    "body_type": "Body type", "city": "City", "car_age": "Car age",
+    "kms_run": "Kilometers driven", "total_owners": "Number of owners",
+}
+FEATURE_IMPORTANCE = [
+    {"feature": FEATURE_LABELS.get(d["feature"], d["feature"]), "importance": d["importance"]}
+    for d in META["feature_importance"]
+]
+
+GENERAL_ADVICE = [
+    "Compare a few similar live listings - this is one estimate, not the only data point.",
+    "If the asking price is above the estimated range, use the gap as your negotiating starting point.",
+    "Always check service and accident history and get an independent mechanic's inspection.",
+    "A price far below the range can signal hidden problems - inspect it even more carefully.",
 ]
 
 
-def build_category_maps():
-    maps = {}
+# ------------------------------------------------------------------
+# Input handling
+# ------------------------------------------------------------------
 
-    for col in CATEGORICAL_RAW_COLUMNS:
-        if col not in df_train.columns:
-            continue
-
-        prefix = col + "_"
-        # every one-hot column in the trained model that belongs to this field
-        candidate_columns = [c for c in feature_columns if c.startswith(prefix)]
-
-        value_map = {}
-        for raw in df_train[col].dropna().astype(str).unique():
-            raw_clean = raw.strip()
-            candidate = f"{prefix}{raw_clean}"
-            if candidate in candidate_columns:
-                value_map[raw_clean.lower()] = candidate
-
-        maps[col] = value_map
-
-    return maps
+def text(value):
+    return str(value).strip().lower() if value not in (None, "") else ""
 
 
-CATEGORY_MAPS = build_category_maps()
-
-
-# ============================================================
-# FEATURE IMPORTANCE (computed once at startup)
-# ============================================================
-
-def humanize_feature_name(name):
-    """Turns a raw trained feature name into something readable for
-    the chart, e.g. 'fuel_type_diesel' -> 'Fuel Type: Diesel',
-    'model_freq' -> 'Model (popularity)'."""
-
-    if name.endswith("_freq"):
-        base = name[:-5].replace("_", " ")
-        return f"{base.title()} (popularity)"
-
-    prefixes = [
-        "fuel_type", "city", "body_type", "transmission", "source",
-        "make", "car_availability", "car_rating", "fitness_certificate",
-    ]
-    for prefix in prefixes:
-        if name.startswith(prefix + "_"):
-            value = name[len(prefix) + 1:]
-            return f"{prefix.replace('_', ' ').title()}: {value.title()}"
-
-    return name.replace("_", " ").title()
-
-
-def build_feature_importance():
+def number(value):
     try:
-        importances = model.feature_importances_
-    except AttributeError:
-        return []
-
-    pairs = list(zip(feature_columns, importances))
-    pairs.sort(key=lambda p: p[1], reverse=True)
-
-    top = pairs[:8]
-    total = sum(v for _, v in pairs) or 1.0
-
-    return [
-        {
-            "feature": humanize_feature_name(name),
-            "importance": round(float(value) / float(total) * 100, 2),
-        }
-        for name, value in top
-    ]
-
-
-FEATURE_IMPORTANCE = build_feature_importance()
-
-
-# ============================================================
-# FREQUENCY ENCODING
-# IMPORTANT:
-# Notebook used normalize=True.
-# The trained feature name is "<col>_freq" (e.g. "model_freq"),
-# NOT the bare column name.
-# ============================================================
-
-frequency_columns = [
-    "car_name",
-    "variant",
-    "registered_city",
-    "registered_state",
-    "rto",
-    "model"
-]
-
-frequency_maps = {}
-
-for col in frequency_columns:
-
-    if col == "car_name":
-        # car_name is derived (make + " " + model), not a raw column —
-        # rebuild it the same way we will at request time.
-        if "make" in df_train.columns and "model" in df_train.columns:
-            car_name_series = (
-                df_train["make"].astype(str).str.strip().str.lower()
-                + " "
-                + df_train["model"].astype(str).str.strip().str.lower()
-            )
-            frequency_maps["car_name"] = (
-                car_name_series.value_counts(normalize=True).to_dict()
-            )
-        continue
-
-    if col in df_train.columns:
-
-        frequency_maps[col] = (
-            df_train[col]
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            .value_counts(normalize=True)
-            .to_dict()
-        )
-
-
-# ============================================================
-# HELPER FUNCTIONS
-# ============================================================
-
-def clean_text(value):
-
-    if value is None:
-        return ""
-
-    return str(value).strip().lower()
-
-
-def to_float(value):
-
-    try:
-        return float(value)
+        return float(value) if value not in (None, "") else None
     except (TypeError, ValueError):
-        return 0.0
+        return None
 
 
-def to_bool(value):
-
-    value = clean_text(value)
-
-    return 1 if value in [
-        "yes",
-        "true",
-        "1",
-        "on"
-    ] else 0
+def truthy(value):
+    return text(value) in {"yes", "true", "1", "on"}
 
 
 def get_request_data():
-    """
-    Works no matter which way the frontend sends data:
-    - JSON body (fetch with Content-Type: application/json)
-    - classic form-encoded POST (multipart/form-data or
-      application/x-www-form-urlencoded)
-    This was the main bug: the previous version only ever read
-    request.form, which is always empty for a JSON POST.
-    """
-
     if request.is_json:
         return request.get_json(silent=True) or {}
-
-    if request.form:
-        return request.form
-
-    # last resort: some clients send JSON without setting the header
-    return request.get_json(silent=True) or {}
+    return request.form or request.get_json(silent=True) or {}
 
 
-# ============================================================
-# SERVER-SIDE VALIDATION
-# ------------------------------------------------------------
-# The HTML form already constrains most of these (min/max/required),
-# but that only protects the browser UI - a direct POST to /predict
-# (curl, Postman, a modified client) bypasses it entirely. This is
-# the real backstop, and it returns a clear, specific message instead
-# of a raw exception or a silently wrong prediction.
-# ============================================================
+def parse_inputs(form):
+    return {
+        "make": text(form.get("make")),
+        "model": text(form.get("model")),
+        "variant": text(form.get("variant")),
+        "fuel_type": text(form.get("fuel_type")),
+        "transmission": text(form.get("transmission")),
+        "body_type": text(form.get("body_type")),
+        "city": text(form.get("city")),
+        "yr_mfr": number(form.get("yr_mfr", form.get("manufacturing_year"))),
+        "kms_run": number(form.get("kms_run", form.get("kms_driven"))),
+        "total_owners": number(form.get("total_owners")) or 1,
+        # New-car (ex-showroom) price: display only, NOT a model feature.
+        "new_price": number(form.get("new_price", form.get("original_price"))),
+        "asking_price": number(form.get("asking_price")),
+        "had_accident": truthy(form.get("had_accident")),
+    }
 
-MIN_MANUFACTURING_YEAR = 1980
 
-
-def validate_inputs(inputs):
+def validate(inp):
     errors = []
-    current_year = datetime.now().year
-
-    if not inputs["make"]:
-        errors.append("Make / brand is required.")
-    if not inputs["model_name"]:
-        errors.append("Model is required.")
-    if not inputs["city"]:
-        errors.append("City is required.")
-    if not inputs["fuel_type"]:
-        errors.append("Fuel type is required.")
-    if not inputs["transmission"]:
-        errors.append("Transmission is required.")
-
-    yr = inputs["manufacturing_year"]
-    if not yr or yr < MIN_MANUFACTURING_YEAR or yr > current_year + 1:
-        errors.append(
-            f"Manufacturing year must be between {MIN_MANUFACTURING_YEAR} and {current_year + 1}."
-        )
-
-    if inputs["kms_driven"] < 0:
-        errors.append("Kilometers driven cannot be negative.")
-
-    if inputs["original_price"] < 0:
-        errors.append("Original price cannot be negative.")
-
-    if inputs["total_owners"] and inputs["total_owners"] < 1:
-        errors.append("Total owners must be at least 1.")
-
+    this_year = datetime.now().year
+    for field, label in [("make", "Make"), ("model", "Model"), ("fuel_type", "Fuel type"),
+                         ("transmission", "Transmission")]:
+        if not inp[field]:
+            errors.append(f"{label} is required.")
+    if inp["yr_mfr"] is None or not (MIN_YEAR <= inp["yr_mfr"] <= this_year):
+        errors.append(f"Manufacturing year must be between {MIN_YEAR} and {this_year}.")
+    if inp["kms_run"] is None or not (0 <= inp["kms_run"] <= 1_000_000):
+        errors.append("Kilometers driven must be between 0 and 10,00,000.")
+    if not (1 <= inp["total_owners"] <= 10):
+        errors.append("Total owners must be between 1 and 10.")
+    for field, label in [("new_price", "New car price"), ("asking_price", "Asking price")]:
+        if inp[field] is not None and inp[field] <= 0:
+            errors.append(f"{label} must be a positive number.")
     return errors
 
 
-# ============================================================
-# GENERAL BUYING ADVICE
-# ------------------------------------------------------------
-# Static, honest guidance shown alongside every prediction - the
-# model gives one estimate from historical listings, not a verdict,
-# so this keeps that context in front of the user every time.
-# ============================================================
-
-GENERAL_ADVICE = [
-    "Compare a few similar listings before deciding - this is one estimate, not the only data point.",
-    "If the asking price is above the estimated range, use that gap as a starting point to negotiate.",
-    "Always verify service history, accident history, and get an independent mechanic's inspection.",
-    "Don't make a purchase decision based on this prediction alone.",
-]
-
-
-def set_categorical_feature(row, prefix, value):
-    """
-    Looks up the exact trained one-hot column for this raw value using
-    CATEGORY_MAPS (built from the real training data), falling back to
-    the old guessing behavior only if nothing was found (e.g. a brand
-    new value the model never saw during training - in that case there
-    is genuinely no matching column, and leaving it at 0 is correct).
-    """
-
-    value_clean = clean_text(value)
-    if not value_clean:
-        return
-
-    exact_map = CATEGORY_MAPS.get(prefix, {})
-    exact_match = exact_map.get(value_clean)
-    if exact_match:
-        row[exact_match] = 1
-        return
-
-    # Fallback: old guessing logic, kept only as a last resort for
-    # values that truly weren't in the training data at all.
-    possible_names = [
-        f"{prefix}_{value_clean}",
-        f"{prefix}_{value_clean.replace(' ', '_')}",
-        f"{prefix}_{value_clean.title()}",
-        f"{prefix}_{value_clean.upper()}",
-    ]
-    for name in possible_names:
-        if name in feature_columns:
-            row[name] = 1
-            return
-
-    # Nothing matched at all - log it so it's visible instead of silent.
-    print(f"[warn] no trained column found for {prefix}='{value_clean}'")
+def reliability_notes(inp):
+    """Tell the user when their input is outside what the model has seen."""
+    notes = []
+    if inp["make"] not in OPTIONS["make_models"]:
+        notes.append(f"'{inp['make'].title()}' isn't in the training data, so this estimate is less reliable.")
+    elif inp["model"] not in OPTIONS["make_models"][inp["make"]]:
+        notes.append(f"The model '{inp['model'].title()}' isn't in the training data, so the estimate "
+                     "relies on brand-level patterns and is less reliable.")
+    if inp["city"] and inp["city"] not in OPTIONS["city"]:
+        notes.append("Your city isn't in the training data; prices are based on the average across all cities.")
+    age = datetime.now().year - inp["yr_mfr"]
+    if age > MAX_CAR_AGE:
+        notes.append(f"The training data only covers cars up to {MAX_CAR_AGE} years old.")
+    notes.append(f"Prices are learned from listings dated {META['data_period']}; "
+                 "today's market may be somewhat higher.")
+    return notes
 
 
-def build_feature_row(inputs):
-    """
-    Builds the exact-column, exact-order row the model expects, from a
-    dict of parsed inputs. Shared by /predict and the price-trend
-    calculation so both use identical logic - avoids duplicating (and
-    accidentally desyncing) the encoding rules in two places.
-    """
+# ------------------------------------------------------------------
+# Prediction helpers
+# ------------------------------------------------------------------
 
-    row = pd.Series(0.0, index=feature_columns, dtype="float64")
-
-    frequency_values = {
-        "car_name": f"{inputs['make']} {inputs['model_name']}".strip(),
-        "variant": inputs["variant"],
-        "registered_city": inputs["registered_city"],
-        "registered_state": inputs["registered_state"],
-        "rto": inputs["rto"],
-        "model": inputs["model_name"],
-    }
-    for col, value in frequency_values.items():
-        feature_name = f"{col}_freq"
-        if feature_name in feature_columns:
-            freq_map = frequency_maps.get(col, {})
-            row[feature_name] = freq_map.get(clean_text(value), 0)
-
-    categorical_values = {
-        "fuel_type": inputs["fuel_type"],
-        "city": inputs["city"],
-        "body_type": inputs["body_type"],
-        "transmission": inputs["transmission"],
-        "source": inputs.get("source", ""),
-        "make": inputs["make"],
-        "car_availability": inputs.get("car_availability", ""),
-        "car_rating": inputs["car_rating"],
-    }
-    for col, value in categorical_values.items():
-        set_categorical_feature(row, col, value)
-
-    # fitness_certificate is boolean-flavoured in the training data
-    # (its two raw values are True/False), so get_dummies names its
-    # column "fitness_certificate_True" / "fitness_certificate_False".
-    # Use to_bool() here too so checkbox values like "on" are handled
-    # the same way as every other boolean-ish field.
-    fitness_bool_str = "True" if to_bool(inputs.get("fitness_certificate", "")) else "False"
-    fitness_column = f"fitness_certificate_{fitness_bool_str}"
-    if fitness_column in feature_columns:
-        row[fitness_column] = 1
-
-    numeric_values = {
-        "yr_mfr": inputs["manufacturing_year"],
-        "kms_run": inputs["kms_driven"],
-        "total_owners": inputs["total_owners"],
-        "original_price": inputs["original_price"],
-        "is_hot": inputs.get("is_hot", 0),
-        "reserved": inputs.get("reserved", 0),
-        "warranty_avail": inputs.get("warranty_avail", 0),
-        "assured_buy": inputs.get("assured_buy", 0),
-        "times_viewed": inputs.get("times_viewed", 0),
-    }
-    for feature_name, value in numeric_values.items():
-        if feature_name in feature_columns:
-            row[feature_name] = value
-
-    # NOTE: your notebook hardcoded 2026 as "current year" when this
-    # feature was engineered — using datetime.now().year is fine while
-    # it's still 2026, but if you retrain later or run this next year,
-    # switch back to a fixed year to stay consistent with training.
-    if "car_age" in feature_columns and inputs["manufacturing_year"]:
-        current_year = datetime.now().year
-        row["car_age"] = max(current_year - int(inputs["manufacturing_year"]), 0)
-
-    return row
+def to_frame(inp, age):
+    row = {col: (inp[col] or MISSING) for col in CATEGORICAL}
+    row.update({
+        "car_age": min(max(age, 0), MAX_CAR_AGE),
+        "kms_run": inp["kms_run"],
+        "total_owners": inp["total_owners"],
+    })
+    return pd.DataFrame([row], columns=FEATURES)
 
 
-def predict_price(row):
-    X_input = pd.DataFrame([row], columns=feature_columns)
-    price = float(model.predict(X_input)[0])
-    return max(price, 0), X_input
+def estimate(inp, age):
+    price = float(pipeline.predict(to_frame(inp, age))[0])
+    if inp["had_accident"]:
+        price *= 1 - ACCIDENT_ADJUSTMENT
+    return max(price, 0.0)
 
 
-# ============================================================
-# DETERMINISTIC DEPRECIATION CEILING
-# ------------------------------------------------------------
-# The trained model has no concept of "must be worth less than
-# what was paid" - it just pattern-matches from historical listings,
-# so it can (correctly, statistically) land within its own margin
-# of error on either side of the original price. To guarantee the
-# business rule "a used car is always valued below its original
-# price, and more so with age / km / accidents", this layer computes
-# an independent, rule-based ceiling and takes whichever of the
-# model's prediction or this ceiling is LOWER. It never overrides the
-# model upward - only ever caps it downward.
-# ============================================================
-
-EXPECTED_KM_PER_YEAR = 12000       # "normal" usage assumption
-MAX_TOTAL_DEPRECIATION = 0.75      # never value a car below 25% of original
-ACCIDENT_PENALTY = 0.15            # flat extra cut for accident history
-SCRAP_AGE_YEARS = 15               # beyond this, recommend scrapping instead of resale
-SCRAP_VALUE_FRACTION = 0.05        # nominal scrap-metal value vs. original price
+def price_trend(inp, span=8):
+    this_year = datetime.now().year
+    years = range(this_year - span + 1, this_year + 1)
+    frame = pd.concat([to_frame(inp, this_year - y) for y in years], ignore_index=True)
+    prices = pipeline.predict(frame)
+    if inp["had_accident"]:
+        prices = prices * (1 - ACCIDENT_ADJUSTMENT)
+    return [{"year": y, "price": round(float(p), -2)} for y, p in zip(years, prices)]
 
 
-def compute_depreciation_breakdown(age_years, kms_driven, had_accident):
-    """Returns (total_fraction, breakdown_dict). total_fraction is how
-    much value is cut from the original price - e.g. 0.32 = 32% down."""
-
-    age_years = max(age_years, 0)
-
-    # Year-wise: cars typically lose the most value in year 1, then a
-    # smaller, fairly steady percentage each year after that.
-    if age_years <= 0:
-        age_pct = 0.05
-    else:
-        age_pct = 0.18 + 0.10 * (age_years - 1)
-    age_pct = min(age_pct, 0.65)
-
-    # Km-wise: extra depreciation only for driving MORE than the
-    # "expected" km for the car's age (12,000 km/year assumption).
-    # Every 10,000 km of excess usage knocks off another 1.5%, capped.
-    expected_km = EXPECTED_KM_PER_YEAR * max(age_years, 1)
-    excess_km = max(0.0, (kms_driven or 0) - expected_km)
-    km_pct = min(0.20, (excess_km / 10000) * 0.015)
-
-    # Accident history: flat penalty on top, since damage/repair
-    # history affects resale value regardless of age or mileage.
-    accident_pct = ACCIDENT_PENALTY if had_accident else 0.0
-
-    total_pct = min(MAX_TOTAL_DEPRECIATION, age_pct + km_pct + accident_pct)
-
-    return total_pct, {
-        "age_pct": round(age_pct * 100, 1),
-        "km_pct": round(km_pct * 100, 1),
-        "accident_pct": round(accident_pct * 100, 1),
-        "total_pct": round(total_pct * 100, 1),
-    }
-
-
-def apply_depreciation_ceiling(raw_predicted_price, original_price, age_years, kms_driven, had_accident):
-    """Caps the model's raw prediction so it can never exceed the
-    rule-based depreciation ceiling. Returns (final_price, breakdown)."""
-
-    total_pct, breakdown = compute_depreciation_breakdown(age_years, kms_driven, had_accident)
-
-    if original_price and original_price > 0:
-        ceiling_price = original_price * (1 - total_pct)
-        final_price = min(raw_predicted_price, ceiling_price)
-    else:
-        # No original price to cap against - still apply the accident
-        # penalty directly to the model's own number, since a real
-        # accident should reduce value regardless of a reference price.
-        final_price = raw_predicted_price * (1 - (ACCIDENT_PENALTY if had_accident else 0.0))
-
-    return max(final_price, 0), breakdown
-
-
-def find_similar_cars(inputs, limit=5):
-    """Looks up real listings from the training CSV that are close to
-    the entered car - same make (if enough exist), similar year and km."""
-
-    if df_train.empty or TARGET_COLUMN is None:
+def similar_cars(inp, age, limit=5):
+    """Real listings closest to this car. Matched on age AT THE TIME OF SALE
+    (not manufacturing year), because the data is from 2019-2021."""
+    pool = df_ref[(df_ref["make"] == inp["make"]) & (df_ref["model"] == inp["model"])]
+    if len(pool) < 3:
+        pool = df_ref[df_ref["make"] == inp["make"]]
+    if pool.empty:
         return []
-
-    candidates = df_train.copy()
-
-    make = inputs["make"]
-    if make and "make" in candidates.columns:
-        same_make = candidates[candidates["make"].astype(str).str.strip().str.lower() == make]
-        if len(same_make) >= 3:
-            candidates = same_make
-
-    mfr_year = inputs.get("manufacturing_year")
-    if "yr_mfr" in candidates.columns and mfr_year is not None:
-        candidates = candidates.assign(
-            _year_diff=(candidates["yr_mfr"] - mfr_year).abs()
-        )
-    else:
-        candidates = candidates.assign(_year_diff=0)
-
-    kms = inputs.get("kms_driven")
-    if "kms_run" in candidates.columns and kms is not None:
-        candidates = candidates.assign(
-            _km_diff=(candidates["kms_run"] - kms).abs()
-        )
-    else:
-        candidates = candidates.assign(_km_diff=0)
-
-    candidates["_score"] = candidates["_year_diff"] * 50000 + candidates["_km_diff"] / 10
-    candidates = candidates.sort_values("_score").head(limit)
-
-    results = []
-    for _, r in candidates.iterrows():
-        results.append({
-            "make": str(r.get("make", "")).title(),
-            "model": str(r.get("model", "")).title(),
-            "year": int(r["yr_mfr"]) if "yr_mfr" in r and pd.notna(r["yr_mfr"]) else None,
-            "kms": int(r["kms_run"]) if "kms_run" in r and pd.notna(r["kms_run"]) else None,
-            "price": round(float(r[TARGET_COLUMN]), 2) if pd.notna(r[TARGET_COLUMN]) else None,
-        })
-    return results
+    score = (pool["car_age"] - age).abs() * 20_000 + (pool["kms_run"] - inp["kms_run"]).abs()
+    return [
+        {
+            "make": r.make.title(), "model": r.model.title(), "variant": r.variant.upper(),
+            "year": f"{int(r.car_age)} yrs", "kms": int(r.kms_run), "city": r.city.title(),
+            "price": float(r.sale_price),
+        }
+        for r in pool.loc[score.nsmallest(limit).index].itertuples()
+    ]
 
 
-def build_price_trend(inputs, span=8):
-    """Holds everything fixed except manufacturing year, and predicts
-    the price at each year in the last `span` years - shows the
-    depreciation curve for this exact car. Each point goes through the
-    same depreciation ceiling as the main prediction, so the curve is
-    a real downward depreciation slope rather than raw (and sometimes
-    noisy) model output."""
-
-    current_year = datetime.now().year
-    original_price = inputs.get("original_price", 0)
-    had_accident = bool(inputs.get("had_accident", 0))
-
-    trend = []
-    for yr in range(current_year - span + 1, current_year + 1):
-        trial_inputs = dict(inputs)
-        trial_inputs["manufacturing_year"] = yr
-        row = build_feature_row(trial_inputs)
-        raw_price, _ = predict_price(row)
-
-        trial_age = max(current_year - yr, 0)
-        final_price, _ = apply_depreciation_ceiling(
-            raw_price, original_price, trial_age, inputs.get("kms_driven", 0), had_accident
-        )
-        trend.append({"year": yr, "price": round(final_price, 2)})
-    return trend
+def verdict(asking, low, high, age):
+    if age >= SCRAP_AGE_YEARS:
+        return "SCRAP", "SCRAP"
+    if asking is None:
+        return "ESTIMATE", None
+    if asking < low:
+        return "UNDERPRICED", "BUY"
+    if asking > high:
+        return "OVERPRICED", "AVOID"
+    return "FAIR", "NEGOTIATE"
 
 
-# ============================================================
-# HOME PAGE
-# ============================================================
+# ------------------------------------------------------------------
+# Routes
+# ------------------------------------------------------------------
 
 @app.route("/")
 def index():
+    return render_template("index.html", options=OPTIONS, meta=META,
+                           this_year=datetime.now().year, min_year=MIN_YEAR)
 
-    return render_template("index.html")
 
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok", "model": META["model_name"]})
 
-# ============================================================
-# PREDICTION
-# ============================================================
 
 @app.route("/predict", methods=["POST"])
 def predict():
-
     try:
+        inp = parse_inputs(get_request_data())
+        errors = validate(inp)
+        if errors:
+            return jsonify({"success": False, "error": " ".join(errors), "errors": errors}), 400
 
-        form = get_request_data()
+        this_year = datetime.now().year
+        age = int(this_year - inp["yr_mfr"])
 
-        # ----------------------------------------------------
-        # READ USER INPUT
-        # Field names below match what the current frontend
-        # actually sends. .get(a, form.get(b)) pattern lets an
-        # older/newer form use either name safely.
-        # ----------------------------------------------------
+        price = estimate(inp, age)
+        low, high = price * BAND_LOW, price * BAND_HIGH
+        status, recommendation = verdict(inp["asking_price"], low, high, age)
 
-        inputs = {
-            "make": clean_text(form.get("make")),
-            "model_name": clean_text(form.get("model")),
-            "variant": clean_text(form.get("variant")),
-            "manufacturing_year": to_float(form.get("yr_mfr", form.get("manufacturing_year"))),
-            "kms_driven": to_float(form.get("kms_run", form.get("kms_driven"))),
-            "fuel_type": clean_text(form.get("fuel_type")),
-            "transmission": clean_text(form.get("transmission")),
-            "body_type": clean_text(form.get("body_type")),
-            "total_owners": to_float(form.get("total_owners")),
-            "city": clean_text(form.get("city")),
-            "registered_city": clean_text(form.get("registered_city")),
-            "registered_state": clean_text(form.get("registered_state")),
-            "rto": clean_text(form.get("rto")),
-            "car_rating": clean_text(form.get("car_rating")),
-            "original_price": to_float(form.get("original_price")),
-            "car_availability": clean_text(form.get("car_availability")),
-            "source": clean_text(form.get("source")),
-            "fitness_certificate": clean_text(form.get("fitness_certificate")),
-            "assured_buy": to_bool(form.get("assured_buy")),
-            "is_hot": to_bool(form.get("is_hot")),
-            "reserved": to_bool(form.get("reserved")),
-            "warranty_avail": to_bool(form.get("warranty_avail", form.get("warranty_available"))),
-            "times_viewed": to_float(form.get("times_viewed")),
-            "had_accident": to_bool(form.get("had_accident")),
-        }
+        scrap_message = None
+        if age >= SCRAP_AGE_YEARS:
+            scrap_message = (
+                f"This vehicle is {age} years old. Many cities restrict older vehicles, and resale value "
+                "at this age depends mostly on condition. Check your state's RTO rules and consider an "
+                "authorised scrapping facility (RVSF), which can issue a certificate with benefits on "
+                "your next purchase."
+            )
 
-        # ----------------------------------------------------
-        # VALIDATION
-        # Reject bad input with a specific, user-facing message
-        # before it ever reaches the model - never a raw traceback.
-        # ----------------------------------------------------
+        notes = reliability_notes(inp)
+        if inp["had_accident"]:
+            notes.insert(0, f"Reduced by {int(ACCIDENT_ADJUSTMENT * 100)}% for accident history "
+                            "(a rule of thumb; the dataset has no accident information).")
 
-        validation_errors = validate_inputs(inputs)
-        if validation_errors:
-            return jsonify({
-                "success": False,
-                "error": " ".join(validation_errors),
-                "errors": validation_errors,
-            }), 400
-
-        print("\nParsed input:", {
-            "make": inputs["make"], "model": inputs["model_name"],
-            "yr_mfr": inputs["manufacturing_year"], "kms_run": inputs["kms_driven"],
-            "fuel_type": inputs["fuel_type"], "transmission": inputs["transmission"],
-            "body_type": inputs["body_type"], "total_owners": inputs["total_owners"],
-            "city": inputs["city"], "original_price": inputs["original_price"],
-            "car_rating": inputs["car_rating"],
+        new_price = inp["new_price"]
+        return jsonify({
+            "success": True,
+            "predicted_price": round(price, -2),
+            "fair_price": round(price, -2),
+            "fair_price_low": round(low, -2),
+            "fair_price_high": round(high, -2),
+            "band_coverage_pct": META["error_band"]["coverage_pct"],
+            "model_mae": MODEL_MAE,
+            "depreciation": round((1 - price / new_price) * 100, 1) if new_price else None,
+            "status": status,
+            "valuation_status": status,
+            "recommendation": recommendation,
+            "asking_vs_estimate": round(inp["asking_price"] / price, 3) if inp["asking_price"] else None,
+            "scrap_recommended": scrap_message is not None,
+            "scrap_message": scrap_message,
+            "notes": notes,
+            "advice": GENERAL_ADVICE,
+            "feature_importance": FEATURE_IMPORTANCE,
+            "similar_cars": similar_cars(inp, age),
+            "price_trend": price_trend(inp),
+            "summary": {
+                "make": inp["make"], "model": inp["model"], "variant": inp["variant"],
+                "manufacturing_year": int(inp["yr_mfr"]), "kms_driven": inp["kms_run"],
+                "total_owners": inp["total_owners"], "city": inp["city"],
+                "new_price": new_price, "asking_price": inp["asking_price"],
+                "had_accident": inp["had_accident"],
+            },
         })
 
-        # ----------------------------------------------------
-        # BUILD FEATURE ROW + PREDICT
-        # ----------------------------------------------------
-
-        row = build_feature_row(inputs)
-        raw_predicted_price, X_input = predict_price(row)
-
-        # Sanity check while you're debugging: how many features
-        # actually ended up non-zero? If this number stays tiny no
-        # matter what you type, something upstream still isn't
-        # reaching this row.
-        nonzero = int((X_input.iloc[0] != 0).sum())
-        print("Prediction input created")
-        print("Feature count:", X_input.shape[1], "| non-zero features:", nonzero)
-
-        # ----------------------------------------------------
-        # DEPRECIATION CEILING (age + km + accident)
-        # Guarantees the final number is always at or below what the
-        # rule-based depreciation curve says the car should be worth -
-        # never above the model's own raw number, only ever capped down.
-        # ----------------------------------------------------
-
-        current_year = datetime.now().year
-        age_years = max(current_year - int(inputs["manufacturing_year"]), 0) if inputs["manufacturing_year"] else 0
-
-        predicted_price, depreciation_breakdown = apply_depreciation_ceiling(
-            raw_predicted_price,
-            inputs["original_price"],
-            age_years,
-            inputs["kms_driven"],
-            bool(inputs["had_accident"]),
-        )
-
-        # ----------------------------------------------------
-        # VALUATION STATUS
-        # (computed first since the scrap branch below can override
-        # predicted_price - the fair price range further down must use
-        # whichever value is final, not the pre-scrap one.)
-        # ----------------------------------------------------
-
-        original_price = inputs["original_price"]
-        scrap_message = None
-
-        if age_years >= SCRAP_AGE_YEARS:
-            # Beyond the usual roadworthy lifespan, resale valuation isn't
-            # really the point anymore - point the user toward scrapping
-            # instead of dressing up a very old vehicle as a "fair deal".
-            predicted_price = round(
-                (original_price * SCRAP_VALUE_FRACTION) if original_price else predicted_price * SCRAP_VALUE_FRACTION,
-                2,
-            )
-            valuation_status = "SCRAP"
-            recommendation = "SCRAP"
-            scrap_message = (
-                f"This vehicle is {age_years} years old, past the {SCRAP_AGE_YEARS}-year mark where "
-                "resale value stops being the relevant question. For your safety, local air quality, "
-                "and the environment, please consider taking it to an authorized vehicle scrapping "
-                "facility (RVSF) instead of reselling it. Scrappage rules vary by state, so check your "
-                "local RTO for current norms and any incentive certificate you may be eligible for."
-            )
-
-        elif original_price and original_price < predicted_price * 0.90:
-
-            valuation_status = "UNDERPRICED"
-            recommendation = "BUY"
-
-        elif original_price and original_price > predicted_price * 1.10:
-
-            valuation_status = "OVERPRICED"
-            recommendation = "AVOID"
-
-        else:
-
-            valuation_status = "FAIR"
-            recommendation = "NEGOTIATE"
-
-        # ----------------------------------------------------
-        # FAIR PRICE RANGE
-        # (uses the final predicted_price, after any scrap override)
-        # ----------------------------------------------------
-
-        fair_low = predicted_price * 0.90
-
-        fair_high = predicted_price * 1.10
-
-        # ----------------------------------------------------
-        # RESPONSE
-        # ----------------------------------------------------
-
-        response = {
-
-            "success": True,
-
-            "predicted_price": round(predicted_price, 2),
-
-            "fair_price": round(predicted_price, 2),
-            "fair_price_low": round(fair_low, 2),
-            "fair_price_high": round(fair_high, 2),
-
-            # Confidence / uncertainty band, based on the model's own MAE.
-            "confidence_low": round(max(predicted_price - MODEL_MAE, 0), 2),
-            "confidence_high": round(predicted_price + MODEL_MAE, 2),
-            "model_mae": MODEL_MAE,
-
-            "depreciation": round(
-                (1 - (predicted_price / original_price)) * 100, 1
-            ) if original_price else 0,
-
-            "depreciation_breakdown": depreciation_breakdown,
-
-            "scrap_recommended": age_years >= SCRAP_AGE_YEARS,
-            "scrap_message": scrap_message,
-
-            "advice": GENERAL_ADVICE,
-
-            "status": valuation_status,
-            "valuation_status": valuation_status,
-
-            "recommendation": recommendation,
-
-            "feature_importance": FEATURE_IMPORTANCE,
-            "similar_cars": find_similar_cars(inputs),
-            "price_trend": build_price_trend(inputs),
-
-            "summary": {
-                "make": inputs["make"],
-                "model": inputs["model_name"],
-                "variant": inputs["variant"],
-                "manufacturing_year": inputs["manufacturing_year"],
-                "kms_driven": inputs["kms_driven"],
-                "total_owners": inputs["total_owners"],
-                "city": inputs["city"],
-                "original_price": original_price,
-                "had_accident": bool(inputs["had_accident"]),
-            }
-        }
-
-        return jsonify(response)
-
     except Exception:
-
-        print("\nPrediction error:")
         traceback.print_exc()
+        return jsonify({"success": False, "error": "Something went wrong on our side. Please try again."}), 500
 
-        return jsonify({
-            "success": False,
-            "error": "Prediction failed. Please check the input values."
-        }), 400
-
-
-# ============================================================
-# RUN APPLICATION
-# ============================================================
 
 if __name__ == "__main__":
-
-    print("\n")
-    print("======================================")
-    print("Smart Used Car Valuation System")
-    print("======================================")
-
-    # Debug is OFF by default - opt in locally with FLASK_DEBUG=true.
-    # Render (or any gunicorn deployment) never runs this block at all;
-    # gunicorn imports `app` directly (e.g. `gunicorn app:app`), so this
-    # is purely for `python app.py` local runs.
-    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=debug_mode, host="0.0.0.0", port=port)
+    debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
