@@ -16,16 +16,50 @@ import joblib
 import pandas as pd
 from flask import Flask, jsonify, render_template, request
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-sys.path.insert(0, PROJECT_ROOT)
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_FILE = os.path.join("models", "car_price_pipeline.joblib")
+META_FILE = os.path.join("models", "model_metadata.json")
+
+
+def find_project_root():
+    """Return the repo root, i.e. the folder that contains models/.
+
+    Works whether app.py lives in the repo root (repo/app.py) or in a
+    subfolder (repo/app/app.py), so the same file runs locally and on
+    Render without any hardcoded paths.
+    """
+    candidates = [APP_DIR, os.path.dirname(APP_DIR), os.getcwd()]
+    for folder in candidates:
+        if os.path.isfile(os.path.join(folder, MODEL_FILE)):
+            return folder
+    raise FileNotFoundError(
+        f"Could not find {MODEL_FILE}. Looked in: " + ", ".join(candidates)
+        + ". Make sure the models/ folder is committed to the repository."
+    )
+
+
+def find_template_dir(root):
+    """templates/ may sit next to app.py or inside app/."""
+    for folder in [os.path.join(APP_DIR, "templates"),
+                   os.path.join(root, "app", "templates"),
+                   os.path.join(root, "templates")]:
+        if os.path.isfile(os.path.join(folder, "index.html")):
+            return folder
+    raise FileNotFoundError("Could not find templates/index.html next to app.py or in app/templates/.")
+
+
+PROJECT_ROOT = find_project_root()
+MODEL_PATH = os.path.join(PROJECT_ROOT, MODEL_FILE)
+META_PATH = os.path.join(PROJECT_ROOT, META_FILE)
+
+# train.py lives in the repo root; make sure it's importable from any layout.
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from train import CATEGORICAL, FEATURES, MISSING, load_and_clean  # noqa: E402
 
-MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "car_price_pipeline.joblib")
-META_PATH = os.path.join(PROJECT_ROOT, "models", "model_metadata.json")
-
-app = Flask(__name__)
+app = Flask(__name__, template_folder=find_template_dir(PROJECT_ROOT))
+print(f"Project root: {PROJECT_ROOT}")
 
 # ------------------------------------------------------------------
 # Load model, metadata and reference data once at startup
