@@ -101,7 +101,7 @@
       <li class="step">
         <span class="step__num">03</span>
         <h3>Analyze price and download report</h3>
-        <p>See the verdict, what drives the price and future value, then save it all as a PDF.</p>
+        <p>See the verdict, key model factors and an illustrative future value, then save it all as a PDF.</p>
       </li>
     </ol>
   </div>
@@ -204,7 +204,7 @@
 
       <div class="results__top">
         <article class="panel value-card">
-          <p class="value-card__label">Estimated market value</p>
+          <p class="value-card__label">Estimated market value <span class="tag">Historical data-based estimate</span></p>
           <p class="value-card__price" id="rPrice">₹0</p>
           <p class="value-card__car" id="rCar"></p>
           <div class="range-bar" id="rRangeBar">
@@ -213,12 +213,13 @@
             <span class="range-bar__asking" id="rAskingMarker" hidden></span>
           </div>
           <div class="range-bar__legend"><span id="rLow"></span><span>Estimated market range</span><span id="rHigh"></span></div>
-          <p class="fineprint" id="rRangeNote"></p>
+          <p class="fineprint">This is an approximate valuation range around the model prediction, not a statistical confidence interval.</p>
         </article>
 
         <article class="panel verdict-card" id="verdictCard">
           <p class="verdict-card__label">Valuation status</p>
           <p class="status-badge" id="rStatus"></p>
+          <p class="status-explain" id="rStatusExplain"></p>
           <div class="rec">
             <p class="rec__code" id="rRecCode"></p>
             <p class="rec__reason" id="rRecReason"></p>
@@ -226,6 +227,12 @@
           <p class="fineprint">This is an estimate, not a guaranteed price.</p>
         </article>
       </div>
+
+      <article class="panel" id="marketPosition">
+        <h3 class="panel__title">Market position</h3>
+        <p class="panel__sub">Where this estimate sits among historical listings of the same model at a similar age and kilometers ({{ meta.data_period }}).</p>
+        <div id="rMarketPos"></div>
+      </article>
 
       <div class="notice notice--warn" id="rScrap" hidden></div>
       <ul class="notes" id="rNotes"></ul>
@@ -238,9 +245,10 @@
         </article>
 
         <article class="panel">
-          <h3 class="panel__title">Why does this car have this valuation?</h3>
-          <p class="panel__sub">How much the model's accuracy depends on each detail, measured on unseen test cars. This describes the model overall, not just this car.</p>
+          <h3 class="panel__title">Key factors considered by the model</h3>
+          <p class="panel__sub">These values represent model-level feature importance and describe the model overall, not the exact contribution of each factor to this individual prediction.</p>
           <div class="importance" id="rImportance"></div>
+          <p class="fineprint">Measured by permutation importance on held-out test data: how much the model's error grows when each input is shuffled, shown as a share of the total across all {{ n_features }} inputs.</p>
         </article>
 
         <article class="panel">
@@ -250,23 +258,24 @@
         </article>
 
         <article class="panel">
-          <h3 class="panel__title">Future value simulator</h3>
+          <h3 class="panel__title">Illustrative future value projection</h3>
           <p class="panel__sub" id="rFutureNote"></p>
           <div class="chips" role="tablist" id="futureChips"></div>
           <div class="future" id="rFuture"></div>
-          <p class="fineprint">Illustrative future value projection. This is an illustrative projection, not a guaranteed resale value.</p>
+          <p class="fineprint">This is an illustrative projection based on the current valuation model and assumed future usage. It is not a separately trained resale-price forecasting model and is not a guaranteed future resale value.</p>
         </article>
       </div>
 
       <article class="panel">
-        <h3 class="panel__title">Similar cars in the data</h3>
-        <p class="panel__sub">Real listings of the same model at a similar age and kilometers. Their prices are from {{ meta.data_period }}.</p>
+        <h3 class="panel__title">Similar historical listings</h3>
+        <p class="panel__sub" id="rSimilarSub">Based on historical listings from {{ meta.data_period }}.</p>
         <div class="table-wrap">
           <table class="table" id="rSimilar">
-            <thead><tr><th>Car</th><th>Age when sold</th><th>KM driven</th><th>City</th><th class="num">Price</th></tr></thead>
+            <thead><tr><th>Car</th><th>Age when sold</th><th>KM driven</th><th>City</th><th class="num">Listed price</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
+        <p class="fineprint">These are historical listings from the project dataset and may not represent current market prices.</p>
       </article>
 
       <div class="results__actions">
