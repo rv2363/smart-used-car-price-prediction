@@ -77,7 +77,7 @@ MAX_CAR_AGE = OPTIONS["max_car_age"]
 BAND_LOW = META["error_band"]["low_ratio"]      # e.g. 0.86
 BAND_HIGH = META["error_band"]["high_ratio"]    # e.g. 1.15
 
-df_ref = load_and_clean()                         # used only for "similar cars"
+df_ref = load_and_clean()                         # used only for similar historical listings
 df_ref["yr_mfr"] = df_ref["yr_mfr"].astype(int)
 
 print(f"Project root: {PROJECT_ROOT}")
@@ -258,7 +258,8 @@ def run_valuation(inp):
     age = this_year - inp["yr_mfr"]
     km_per_year = min(max(inp["kms_run"] / age, 5_000), 25_000) if age >= 1 else DEFAULT_KM_PER_YEAR
 
-    trend_years = list(range(this_year - 7, this_year + 1))
+    start = min(this_year - 7, inp["yr_mfr"])            # always include the car's own year
+    trend_years = list(range(start, start + 8))
     scenarios = (
         [(age, inp["kms_run"])]                                                        # the car today
         + [(this_year - y, inp["kms_run"]) for y in trend_years]                       # by mfg year
@@ -273,6 +274,19 @@ def run_valuation(inp):
         for n, p in zip(FUTURE_YEARS, preds[9:])
     ]
     return age, price, trend, future, km_per_year
+
+
+def inr_text(value):
+    """Rupees with Indian digit grouping, rounded like the displayed estimate: 182362 -> ₹1,82,400."""
+    n = str(int(round(value, -2)))
+    head, tail = n[:-3], n[-3:]
+    groups = []
+    while len(head) > 2:
+        groups.insert(0, head[-2:])
+        head = head[:-2]
+    if head:
+        groups.insert(0, head)
+    return "₹" + ",".join(groups + [tail]) if groups else "₹" + tail
 
 
 def price_difference(reference, price):
@@ -297,8 +311,8 @@ def verdict(inp, price, low, high, age):
                "Get a thorough inspection before paying anything.")
     elif asking is None:
         rec = ("COMPARE BEFORE BUYING",
-               "Add the seller's asking price to see whether it is fair. Meanwhile, use the "
-               "estimated range as your reference when comparing listings.")
+               "Use the estimated market range as a reference when comparing listings, and "
+               "inspect the car before agreeing on a price.")
     elif asking < low * 0.85:
         rec = ("VERIFY VEHICLE CONDITION",
                "The asking price is far below the estimated range. Deals this cheap can hide "
@@ -313,42 +327,70 @@ def verdict(inp, price, low, high, age):
     elif asking <= high:
         rec = ("NEGOTIATE",
                "The asking price is within the range but above the estimate, so there is room "
-               f"to negotiate towards about ₹{price:,.0f}.")
+               f"to negotiate towards about {inr_text(price)}.")
     else:
         rec = ("NEGOTIATE",
-               "The asking price is above the estimated market value. Compare similar vehicles "
-               "and negotiate, or keep looking.")
+               f"A reasonable target is closer to the estimate of about {inr_text(price)}. Check the "
+               "car's condition and documents before making an offer.")
 
     if asking is None:
-        status = None
+        status, explanation = None, "Enter the seller's asking price to compare it with the estimated market value."
     elif asking < low:
         status = "UNDERPRICED"
+        explanation = "Your asking price is below the model's estimated market range."
     elif asking > high:
         status = "OVERPRICED"
+        explanation = ("Your asking price is above the model's estimated market range. Consider comparing "
+                       "similar historical listings and negotiating.")
     else:
         status = "FAIR VALUE"
-    return status, {"code": rec[0], "reason": rec[1]}
+        explanation = "Your asking price falls within the model's estimated market range."
+    return status, explanation, {"code": rec[0], "reason": rec[1]}
 
 
-def similar_cars(inp, age, limit=5):
+def similar_listings(inp, age, limit=5):
+    """Closest historical listings, matched on age at sale and kilometers.
+
+    Uses the same make + model when at least 3 exist, otherwise the same make.
+    Returns (listings, match_level)."""
     pool = df_ref[(df_ref["make"] == inp["make"]) & (df_ref["model"] == inp["model"])]
+    match = "model"
     if len(pool) < 3:
-        pool = df_ref[df_ref["make"] == inp["make"]]
+        pool, match = df_ref[df_ref["make"] == inp["make"]], "make"
     if pool.empty:
-        return []
+        return [], None
     score = (pool["car_age"] - age).abs() * 20_000 + (pool["kms_run"] - inp["kms_run"]).abs()
-    return [
+    listings = [
         {"name": f"{r.make.title()} {r.model.title()}", "variant": r.variant.upper(),
          "age": int(r.car_age), "kms": int(r.kms_run), "city": r.city.title(),
          "price": float(r.sale_price)}
         for r in pool.loc[score.nsmallest(limit).index].itertuples()
     ]
+    return listings, match
+
+
+def market_position(listings, match, price):
+    """Where the prediction sits among the historical comparables. Only the
+    same make + model counts as comparable, and at least 3 are required."""
+    if match != "model" or len(listings) < 3:
+        return {"available": False, "message": "Limited historical comparables available."}
+    prices = sorted(l["price"] for l in listings)
+    return {
+        "available": True,
+        "count": len(prices),
+        "low": prices[0],
+        "high": prices[-1],
+        "median": float(pd.Series(prices).median()),
+        "prices": prices,
+        "prediction": round(price, -2),
+    }
 
 
 def build_result(inp):
     age, price, trend, future, km_per_year = run_valuation(inp)
+    listings, match = similar_listings(inp, age)
     low, high = price * BAND_LOW, price * BAND_HIGH
-    status, recommendation = verdict(inp, price, low, high, age)
+    status, status_explanation, recommendation = verdict(inp, price, low, high, age)
 
     scrap_message = None
     if age >= SCRAP_AGE_YEARS:
@@ -361,8 +403,8 @@ def build_result(inp):
         "predicted_price": round(price, -2),
         "range_low": round(low, -2),
         "range_high": round(high, -2),
-        "range_coverage_pct": META["error_band"]["coverage_pct"],
         "status": status,
+        "status_explanation": status_explanation,
         "recommendation": recommendation,
         "vs_asking": price_difference(inp["asking_price"], price),
         "vs_new": price_difference(inp["new_price"], price),
@@ -371,7 +413,10 @@ def build_result(inp):
         "scrap_message": scrap_message,
         "notes": reliability_notes(inp, age),
         "feature_importance": FEATURE_IMPORTANCE,
-        "similar_cars": similar_cars(inp, age),
+        "similar_listings": listings,
+        "similar_match": match,
+        "market_position": market_position(listings, match, price),
+        "data_period": META["data_period"],
         "price_trend": trend,
         "future_values": future,
         "car": {
