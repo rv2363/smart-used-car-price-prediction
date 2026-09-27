@@ -188,13 +188,12 @@
     $("#rLow").textContent = short(r.range_low);
     $("#rHigh").textContent = short(r.range_high);
     positionRange($("#rRangeBar"), r.range_low, r.range_high, r.predicted_price, c.asking_price);
-    $("#rRangeNote").textContent = `Estimated market range ${short(r.range_low)} – ${short(r.range_high)}. `
-      + `In testing, ${r.range_coverage_pct}% of cars sold within a range like this around the estimate.`;
 
     // status + recommendation
     const status = $("#rStatus");
     status.dataset.status = r.status || "NONE";
     status.textContent = r.status ? title(r.status.toLowerCase()) : "Add an asking price for a verdict";
+    $("#rStatusExplain").textContent = r.status_explanation;
     $(".rec").dataset.code = r.recommendation.code;
     $("#rRecCode").textContent = title(r.recommendation.code.toLowerCase());
     $("#rRecReason").textContent = r.recommendation.reason;
@@ -208,13 +207,16 @@
     renderImportance(r.feature_importance);
     renderTrend(r.price_trend, c.yr_mfr);
     renderFuture(r);
-    renderSimilar(r.similar_cars);
+    renderMarketPosition(r.market_position);
+    renderSimilar(r);
   }
 
+  // Estimated price difference = (predicted - reference) / reference x 100, computed server-side.
   function diffText(diff, refName) {
     if (!diff) return "";
-    if (diff.direction === "equal") return `Same as ${refName}`;
-    return `Market value is ${short(Math.abs(diff.amount))} (${Math.abs(diff.pct).toFixed(1)}%) ${diff.direction} the ${refName}`;
+    if (diff.direction === "equal") return `Estimated price difference: same as ${refName}`;
+    const sign = diff.pct > 0 ? "+" : "−";
+    return `Estimated price difference: ${sign}${Math.abs(diff.pct).toFixed(1)}% ${diff.direction} ${refName} (${sign}${short(Math.abs(diff.amount))})`;
   }
 
   function renderBars(r) {
@@ -234,7 +236,7 @@
     }).join("");
     requestAnimationFrame(() => $$("#rBars .cbar__fill").forEach((el, i) => { el.style.width = (rows[i].v / max) * 100 + "%"; }));
     if (!c.new_price && !c.asking_price) {
-      $("#rBars").insertAdjacentHTML("beforeend", `<p class="fineprint">Add the asking price or original price in the form to compare them with the market value here.</p>`);
+      $("#rBars").insertAdjacentHTML("beforeend", `<p class="diff-line">Estimated price difference: add original/asking price to compare.</p>`);
     }
   }
 
@@ -252,12 +254,12 @@
   }
 
   function renderImportance(list) {
-    const top = list.slice(0, 7);
+    const top = list;  // every model input, as measured - nothing hidden or rescaled
     const max = Math.max(...top.map((d) => d.importance)) || 1;
     $("#rImportance").innerHTML = top.map((d) => `
       <div class="imp__row"><span class="imp__name">${esc(d.feature)}</span>
       <span class="imp__track"><span class="imp__fill" style="width:0"></span></span>
-      <span class="imp__val">${d.importance.toFixed(0)}%</span></div>`).join("");
+      <span class="imp__val">${d.importance < 1 ? d.importance.toFixed(1) : d.importance.toFixed(0)}%</span></div>`).join("");
     requestAnimationFrame(() => $$("#rImportance .imp__fill").forEach((el, i) => { el.style.width = (top[i].importance / max) * 100 + "%"; }));
   }
 
@@ -282,7 +284,7 @@
 
   let futureSel = 3;
   function renderFuture(r) {
-    $("#rFutureNote").textContent = `Runs the same model for an older car, driven about ${km(r.km_per_year)} a year (its current usage), at the same price level as today's estimate.`;
+    $("#rFutureNote").textContent = `Assumes the car keeps being driven about ${km(r.km_per_year)} a year (its usage so far) and applies the current valuation model to its future age and kilometers.`;
     $("#futureChips").innerHTML = r.future_values.map((f) =>
       `<button type="button" class="chip" role="tab" aria-selected="${f.years === futureSel}" data-years="${f.years}">${f.years} year${f.years > 1 ? "s" : ""}</button>`).join("");
     const show = () => {
@@ -296,7 +298,36 @@
     show();
   }
 
-  function renderSimilar(list) {
+  function renderMarketPosition(mp) {
+    const box = $("#rMarketPos");
+    if (!mp.available) { box.innerHTML = `<p class="mpos__empty">${esc(mp.message)}</p>`; return; }
+    const lo = Math.min(mp.low, mp.prediction), hi = Math.max(mp.high, mp.prediction);
+    const pad = (hi - lo) * 0.12 || hi * 0.1;
+    const min = lo - pad, max = hi + pad;
+    const pct = (v) => ((v - min) / (max - min)) * 100;
+    const p = pct(mp.prediction);
+    const shift = p > 80 ? "calc(-100% + 8px)" : p < 20 ? "-8px" : "-50%";
+    box.innerHTML = `
+      <div class="mpos">
+        <div class="mpos__scale" role="img" aria-label="Prediction ${short(mp.prediction)} compared with ${mp.count} historical listings from ${short(mp.low)} to ${short(mp.high)}">
+          <span class="mpos__track"></span>
+          <span class="mpos__band" style="left:${pct(mp.low)}%;width:${pct(mp.high) - pct(mp.low)}%"></span>
+          ${mp.prices.map((v) => `<span class="mpos__dot" style="left:${pct(v)}%" title="${inr(v)}"></span>`).join("")}
+          <span class="mpos__pred" style="left:${p}%;--label-shift:${shift}" data-label="${short(mp.prediction)}"></span>
+        </div>
+        <dl class="mpos__legend">
+          <div><dt><i class="mpos__key mpos__key--pred"></i>Current prediction (estimated market value)</dt><dd>${short(mp.prediction)}</dd></div>
+          <div><dt><i class="mpos__key mpos__key--comp"></i>Historical comparable listings (${mp.count})</dt><dd>${short(mp.low)} – ${short(mp.high)}</dd></div>
+          <div><dt>Median comparable listing</dt><dd>${short(mp.median)}</dd></div>
+        </dl>
+      </div>`;
+  }
+
+  function renderSimilar(r) {
+    const list = r.similar_listings;
+    $("#rSimilarSub").textContent = r.similar_match === "make"
+      ? `Fewer than 3 listings of this model exist, so these are other ${r.car.make} models. Based on historical listings from ${r.data_period}.`
+      : `Same model at a similar age and kilometers. Based on historical listings from ${r.data_period}.`;
     const body = $("#rSimilar tbody");
     body.innerHTML = list.length
       ? list.map((s) => `<tr><td>${esc(s.name)} <small>${esc(s.variant)}</small></td><td>${s.age} yrs</td><td>${km(s.kms)}</td><td>${esc(s.city)}</td><td class="num">${inr(s.price)}</td></tr>`).join("")
