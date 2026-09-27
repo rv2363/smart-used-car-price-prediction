@@ -191,6 +191,8 @@ button, input, select { font: inherit; color: inherit; }
 .value-card .range-bar { margin-bottom: 30px; }
 .value-card .range-bar.has-asking { margin-bottom: 38px; }
 
+.tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--lilac); color: var(--violet); font-size: 12px; font-weight: 700; vertical-align: 1px; }
+.status-explain { margin-top: 10px; font-size: 15px; color: var(--ink-2); }
 .status-badge { display: inline-flex; margin-top: 10px; padding: 6px 16px; border-radius: 999px; font-family: var(--font-display); font-weight: 700; font-size: 18px; background: var(--lilac); color: var(--violet); }
 .status-badge[data-status="UNDERPRICED"] { background: var(--good-bg); color: var(--good); }
 .status-badge[data-status="OVERPRICED"] { background: var(--bad-bg); color: var(--bad); }
@@ -223,6 +225,23 @@ button, input, select { font: inherit; color: inherit; }
 .facts div { background: var(--page); border-radius: var(--r-md); padding: 10px 12px; min-width: 0; }
 .facts dt { font-size: 12px; color: var(--muted); font-weight: 600; }
 .facts dd { margin: 2px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+
+/* Market position */
+.mpos { margin-top: 18px; }
+.mpos__scale { position: relative; height: 56px; margin: 28px 8px 8px; }
+.mpos__track { position: absolute; left: 0; right: 0; top: 24px; height: 8px; border-radius: 999px; background: var(--page); }
+.mpos__band { position: absolute; top: 24px; height: 8px; border-radius: 999px; background: #C9BDF0; }
+.mpos__dot { position: absolute; top: 22px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--white); border: 2px solid #8F84AD; }
+.mpos__pred { position: absolute; top: 14px; width: 4px; height: 28px; margin-left: -2px; border-radius: 3px; background: var(--violet); box-shadow: 0 0 0 3px var(--white); }
+.mpos__pred::before { content: attr(data-label); position: absolute; bottom: 32px; left: 50%; transform: translateX(var(--label-shift, -50%)); white-space: nowrap; font-size: 13px; font-weight: 700; color: var(--violet); }
+.mpos__legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px; }
+.mpos__legend div { background: var(--page); border-radius: var(--r-md); padding: 10px 12px; }
+.mpos__legend dt { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.mpos__legend dd { margin: 2px 0 0; font-family: var(--font-display); font-weight: 700; font-size: 18px; }
+.mpos__key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.mpos__key--pred { background: var(--violet); }
+.mpos__key--comp { background: var(--white); border: 2px solid #8F84AD; }
+.mpos__empty { margin-top: 14px; padding: 14px 16px; border-radius: var(--r-md); background: var(--page); font-weight: 600; color: var(--ink-2); }
 
 /* Importance */
 .importance { margin-top: 18px; display: grid; gap: 12px; }
@@ -399,6 +418,7 @@ button, input, select { font: inherit; color: inherit; }
   .tool__head { flex-direction: column; }
   .score { align-self: stretch; }
   .future { grid-template-columns: 1fr; }
+  .mpos__legend { grid-template-columns: 1fr; }
   .form__actions .btn, .results__actions .btn { width: 100%; }
   .hero__ctas .btn { flex: 1 1 100%; }
 }
