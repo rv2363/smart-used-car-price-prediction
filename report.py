@@ -82,7 +82,7 @@ def build_report_pdf(result, health, meta, health_items, health_answers):
 
     story += [
         Paragraph("Smart Car Valuator", st["title"]),
-        Paragraph(f"AI-powered used car valuation report &nbsp;|&nbsp; Generated {datetime.now():%d %b %Y, %I:%M %p}",
+        Paragraph(f"Historical data-based valuation report &nbsp;|&nbsp; Generated {datetime.now():%d %b %Y, %I:%M %p}",
                   st["sub"]),
         Spacer(1, 8),
     ]
@@ -93,7 +93,7 @@ def build_report_pdf(result, health, meta, health_items, health_answers):
          Paragraph(f"Estimated market range: {inr(result['range_low'])} - {inr(result['range_high'])}", st["body"])],
         [Paragraph("Valuation status", st["small"]),
          Paragraph(f"<font color='{STATUS_COLORS.get(result['status'], '#6B6485')}'><b>"
-                   f"{result['status'] or 'No asking price given'}</b></font>", st["body"]),
+                   f"{result['status'] or 'Add an asking price for a verdict'}</b></font>", st["body"]),
          Spacer(1, 4),
          Paragraph("Recommendation", st["small"]),
          Paragraph(f"<b>{result['recommendation']['code']}</b>", st["body"])],
@@ -104,7 +104,14 @@ def build_report_pdf(result, health, meta, health_items, health_answers):
         ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
         ("TOPPADDING", (0, 0), (-1, -1), 9), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
     ]))
-    story += [headline, Spacer(1, 4), Paragraph(result["recommendation"]["reason"], st["body"])]
+    story += [
+        headline, Spacer(1, 4),
+        Paragraph("The estimated market range is an approximate valuation range around the model prediction, "
+                  "not a statistical confidence interval.", st["small"]),
+        Spacer(1, 4),
+        Paragraph(result["status_explanation"], st["body"]),
+        Paragraph(result["recommendation"]["reason"].replace("₹", "Rs. "), st["body"]),  # PDF base fonts lack ₹
+    ]
 
     # Vehicle details
     story.append(Paragraph("Vehicle details", st["h2"]))
@@ -120,30 +127,62 @@ def build_report_pdf(result, health, meta, health_items, health_answers):
 
     # Price analysis
     def diff_line(diff, name):
+        # (predicted - reference) / reference x 100
         if not diff:
-            return "-"
+            return "Add original/asking price to compare"
         if diff["direction"] == "equal":
             return f"Same as {name}"
-        sign = "+" if diff["amount"] > 0 else "-"
-        return f"{sign}{inr(abs(diff['amount']))} ({abs(diff['pct']):.1f}% {diff['direction']} {name})"
+        sign = "+" if diff["pct"] > 0 else "-"
+        return f"{sign}{abs(diff['pct']):.1f}% {diff['direction']} {name} ({sign}{inr(abs(diff['amount']))})"
 
     story.append(Paragraph("Price analysis", st["h2"]))
     story.append(_kv_table([
         ["Estimated market value", inr(result["predicted_price"])],
         ["Estimated market range", f"{inr(result['range_low'])} - {inr(result['range_high'])}"],
         ["Seller's asking price", inr(car["asking_price"]) if car["asking_price"] else "Not provided"],
-        ["Market value vs asking price", diff_line(result["vs_asking"], "asking price")],
+        ["Price difference vs asking", diff_line(result["vs_asking"], "asking price")],
         ["Original (new) price", inr(car["new_price"]) if car["new_price"] else "Not provided"],
-        ["Market value vs original price", diff_line(result["vs_new"], "original price")],
+        ["Price difference vs original", diff_line(result["vs_new"], "original price")],
     ]))
 
+    # Market position + similar historical listings
+    mp = result["market_position"]
+    story.append(Paragraph("Market position", st["h2"]))
+    if mp["available"]:
+        story.append(_kv_table([
+            ["Estimated market value", inr(result["predicted_price"])],
+            [f"Historical comparable listings ({mp['count']})", f"{inr(mp['low'])} - {inr(mp['high'])}"],
+            ["Median comparable listing", inr(mp["median"])],
+        ]))
+    else:
+        story.append(Paragraph(mp["message"], st["body"]))
+
+    if result["similar_listings"]:
+        story.append(Paragraph("Similar historical listings", st["h2"]))
+        rows = [["Car", "Age when sold", "KM driven", "City", "Listed price"]] + [
+            [f"{l['name']} {l['variant']}", f"{l['age']} yrs", f"{l['kms']:,} km", l["city"], inr(l["price"])]
+            for l in result["similar_listings"]
+        ]
+        t = Table(rows, colWidths=(60 * mm, 25 * mm, 28 * mm, 27 * mm, 30 * mm))
+        t.setStyle(TableStyle([
+            ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8.5), ("FONT", (0, 1), (-1, -1), "Helvetica", 8.5),
+            ("TEXTCOLOR", (0, 0), (-1, 0), MUTED), ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.5, LINE),
+            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        story.append(t)
+        story.append(Paragraph(f"Based on historical listings from {result['data_period']}. These are historical "
+                               "listings from the project dataset and may not represent current market prices.",
+                               st["small"]))
+
     # Key factors
-    story.append(Paragraph("What the model weighs most", st["h2"]))
-    story.append(Paragraph("Share of the model's accuracy that depends on each input, measured on unseen "
-                           "test data (permutation importance). It describes the model overall, not this car alone.",
+    story.append(Paragraph("Key factors considered by the model", st["h2"]))
+    story.append(Paragraph("These values represent model-level feature importance and describe the model overall, "
+                           "not the exact contribution of each factor to this individual prediction. Measured by "
+                           "permutation importance on held-out test data, shown as a share of the total.",
                            st["small"]))
     story.append(Spacer(1, 3))
-    story.append(_kv_table([[f["feature"], f"{f['importance']:.1f}%"] for f in result["feature_importance"][:7]]))
+    story.append(_kv_table([[f["feature"], f"{f['importance']:.1f}%"] for f in result["feature_importance"]]))
 
     # Future values
     story.append(Paragraph("Illustrative future value projection", st["h2"]))
@@ -152,8 +191,9 @@ def build_report_pdf(result, health, meta, health_items, health_answers):
           f"{inr(f['price'])} ({f['change_pct']:+.1f}%)"] for f in result["future_values"]]
     ))
     story.append(Paragraph("Assumes the car keeps being driven about "
-                           f"{int(result['km_per_year']):,} km a year, at the same market price level. "
-                           "This is an illustrative projection, not a guaranteed resale value.", st["small"]))
+                           f"{int(result['km_per_year']):,} km a year. This is an illustrative projection based on "
+                           "the current valuation model and assumed future usage. It is not a separately trained "
+                           "resale-price forecasting model and is not a guaranteed future resale value.", st["small"]))
 
     # Health check
     if health:
