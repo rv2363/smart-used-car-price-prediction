@@ -236,7 +236,7 @@
     }).join("");
     requestAnimationFrame(() => $$("#rBars .cbar__fill").forEach((el, i) => { el.style.width = (rows[i].v / max) * 100 + "%"; }));
     if (!c.new_price && !c.asking_price) {
-      $("#rBars").insertAdjacentHTML("beforeend", `<p class="diff-line">Estimated price difference: add original/asking price to compare.</p>`);
+      $("#rBars").insertAdjacentHTML("beforeend", `<p class="diff-line">Estimated price difference: add an asking price to compare.</p>`);
     }
   }
 
@@ -284,7 +284,7 @@
 
   let futureSel = 3;
   function renderFuture(r) {
-    $("#rFutureNote").textContent = `Assumes the car keeps being driven about ${km(r.km_per_year)} a year (its usage so far) and applies the current valuation model to its future age and kilometers.`;
+    $("#rFutureNote").textContent = `Assumed usage: about ${km(r.km_per_year)} a year, based on the car's usage so far.`;
     $("#futureChips").innerHTML = r.future_values.map((f) =>
       `<button type="button" class="chip" role="tab" aria-selected="${f.years === futureSel}" data-years="${f.years}">${f.years} year${f.years > 1 ? "s" : ""}</button>`).join("");
     const show = () => {
@@ -316,9 +316,9 @@
           <span class="mpos__pred" style="left:${p}%;--label-shift:${shift}" data-label="${short(mp.prediction)}"></span>
         </div>
         <dl class="mpos__legend">
-          <div><dt><i class="mpos__key mpos__key--pred"></i>Current prediction (estimated market value)</dt><dd>${short(mp.prediction)}</dd></div>
-          <div><dt><i class="mpos__key mpos__key--comp"></i>Historical comparable listings (${mp.count})</dt><dd>${short(mp.low)} – ${short(mp.high)}</dd></div>
-          <div><dt>Median comparable listing</dt><dd>${short(mp.median)}</dd></div>
+          <div><dt><i class="mpos__key mpos__key--pred"></i>Estimated market value</dt><dd>${short(mp.prediction)}</dd></div>
+          <div><dt><i class="mpos__key mpos__key--comp"></i>Historical comparable range</dt><dd>${short(mp.low)} – ${short(mp.high)}</dd></div>
+          <div><dt>Comparable listings</dt><dd>${mp.count}</dd></div>
         </dl>
       </div>`;
   }
@@ -326,8 +326,8 @@
   function renderSimilar(r) {
     const list = r.similar_listings;
     $("#rSimilarSub").textContent = r.similar_match === "make"
-      ? `Fewer than 3 listings of this model exist, so these are other ${r.car.make} models. Based on historical listings from ${r.data_period}.`
-      : `Same model at a similar age and kilometers. Based on historical listings from ${r.data_period}.`;
+      ? `Similar historical listings from the project dataset. Fewer than 3 listings of this model exist, so these are other ${r.car.make} models.`
+      : "Similar historical listings from the project dataset.";
     const body = $("#rSimilar tbody");
     body.innerHTML = list.length
       ? list.map((s) => `<tr><td>${esc(s.name)} <small>${esc(s.variant)}</small></td><td>${s.age} yrs</td><td>${km(s.kms)}</td><td>${esc(s.city)}</td><td class="num">${inr(s.price)}</td></tr>`).join("")
