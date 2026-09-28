@@ -88,6 +88,7 @@ print(f"Loaded {META['model_name']} | test R2 {META['test_metrics']['r2']} "
 # Constants and plain-logic rules (NOT part of the ML model)
 # ------------------------------------------------------------------
 
+APP_VERSION = "2026-09-27-accuracy-v3"   # shown at /health and in the page footer - use it to confirm what is deployed
 MIN_YEAR = 1990
 SCRAP_AGE_YEARS = 15
 FUTURE_YEARS = [1, 2, 3, 5]
@@ -380,7 +381,6 @@ def market_position(listings, match, price):
         "count": len(prices),
         "low": prices[0],
         "high": prices[-1],
-        "median": float(pd.Series(prices).median()),
         "prices": prices,
         "prediction": round(price, -2),
     }
@@ -446,13 +446,13 @@ def index():
     return render_template(
         "index.html", options=OPTIONS, meta=META, health_check=HEALTH_CHECK,
         this_year=datetime.now().year, min_year=MIN_YEAR,
-        n_features=len(META["features"]),
+        n_features=len(META["features"]), app_version=APP_VERSION,
     )
 
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "model": META["model_name"]})
+    return jsonify({"status": "ok", "version": APP_VERSION, "model": META["model_name"]})
 
 
 @app.route("/predict", methods=["POST"])
@@ -490,7 +490,7 @@ def not_found(_):
         return jsonify({"success": False, "error": "Not found."}), 404
     return render_template("index.html", options=OPTIONS, meta=META, health_check=HEALTH_CHECK,
                            this_year=datetime.now().year, min_year=MIN_YEAR,
-                           n_features=len(META["features"])), 404
+                           n_features=len(META["features"]), app_version=APP_VERSION), 404
 
 
 @app.errorhandler(413)
