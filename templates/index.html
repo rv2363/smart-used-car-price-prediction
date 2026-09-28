@@ -57,7 +57,7 @@
         <a href="#compare" class="btn btn--ghost-light">Compare cars</a>
       </div>
       <ul class="hero__facts">
-        <li>Trained on {{ '{:,}'.format(meta.n_rows) }} real listings</li>
+        <li>Trained on {{ '{:,}'.format(meta.n_rows) }} historical listings</li>
         <li>{{ options.make_models|length }} brands, {{ options.city|length }} cities</li>
         <li>Free, no sign-up</li>
       </ul>
@@ -96,7 +96,7 @@
       <li class="step">
         <span class="step__num">02</span>
         <h3>AI predicts estimated value</h3>
-        <p>A machine learning model trained on real listings estimates the market price and a realistic range.</p>
+        <p>A machine learning model trained on historical listings estimates the market value and an approximate range.</p>
       </li>
       <li class="step">
         <span class="step__num">03</span>
@@ -230,7 +230,7 @@
 
       <article class="panel" id="marketPosition">
         <h3 class="panel__title">Market position</h3>
-        <p class="panel__sub">Where this estimate sits among historical listings of the same model at a similar age and kilometers ({{ meta.data_period }}).</p>
+        <p class="panel__sub">How the estimate compares with historical listings of the same model at a similar age and kilometers, from the project dataset ({{ meta.data_period|replace(" - ", " – ") }}).</p>
         <div id="rMarketPos"></div>
       </article>
 
@@ -246,36 +246,37 @@
 
         <article class="panel">
           <h3 class="panel__title">Key factors considered by the model</h3>
-          <p class="panel__sub">These values represent model-level feature importance and describe the model overall, not the exact contribution of each factor to this individual prediction.</p>
+          <p class="panel__sub">These factors describe the model's overall behavior and are not the exact contribution of each factor to this individual prediction.</p>
           <div class="importance" id="rImportance"></div>
-          <p class="fineprint">Measured by permutation importance on held-out test data: how much the model's error grows when each input is shuffled, shown as a share of the total across all {{ n_features }} inputs.</p>
+          <p class="fineprint">Source: permutation importance of the trained model on its held-out test data (computed by train.py, stored in models/model_metadata.json). Shown as each input's share of the total.</p>
         </article>
 
         <article class="panel">
-          <h3 class="panel__title">Price by manufacturing year</h3>
-          <p class="panel__sub">The same car and kilometers, if it had been made in a different year.</p>
+          <h3 class="panel__title">Estimated price by manufacturing year</h3>
+          <p class="panel__sub">Illustrative model estimates for the same vehicle characteristics at different manufacturing years. These are not observed historical prices.</p>
           <div class="chart" id="rTrend"></div>
         </article>
 
         <article class="panel">
           <h3 class="panel__title">Illustrative future value projection</h3>
-          <p class="panel__sub" id="rFutureNote"></p>
+          <p class="panel__sub">This is an illustrative projection based on the current valuation model and assumed future usage. It is not a separately trained resale-price forecasting model and is not a guaranteed future resale value.</p>
+          <p class="assumption" id="rFutureNote"></p>
           <div class="chips" role="tablist" id="futureChips"></div>
           <div class="future" id="rFuture"></div>
-          <p class="fineprint">This is an illustrative projection based on the current valuation model and assumed future usage. It is not a separately trained resale-price forecasting model and is not a guaranteed future resale value.</p>
+          <p class="fineprint">Illustrative projection only — not a guaranteed future resale value.</p>
         </article>
       </div>
 
       <article class="panel">
         <h3 class="panel__title">Similar historical listings</h3>
-        <p class="panel__sub" id="rSimilarSub">Based on historical listings from {{ meta.data_period }}.</p>
+        <p class="panel__sub" id="rSimilarSub">Similar historical listings from the project dataset.</p>
         <div class="table-wrap">
           <table class="table" id="rSimilar">
             <thead><tr><th>Car</th><th>Age when sold</th><th>KM driven</th><th>City</th><th class="num">Listed price</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
-        <p class="fineprint">These are historical listings from the project dataset and may not represent current market prices.</p>
+        <p class="fineprint">These listings are from the historical dataset ({{ meta.data_period|replace(" - ", " – ") }}) and may not represent current market prices.</p>
       </article>
 
       <div class="results__actions">
@@ -456,7 +457,7 @@
       </div>
       <div>
         <h3>What it deliberately ignores</h3>
-        <p>Columns like the listing's own price rating and pre-discount price were removed, because they contain the answer. A model using them looks accurate in testing but fails on real users' cars.</p>
+        <p>Columns like the listing's own price rating and pre-discount price were removed, because they contain the answer. A model using them scores well on paper but fails on real users' cars.</p>
       </div>
     </div>
     <p class="fineprint fineprint--center">Model performance is based on the project's held-out test dataset.</p>
@@ -475,7 +476,7 @@
 <footer class="footer">
   <div class="container footer__inner">
     <p><strong>Smart Car Valuator</strong><br><span>Used car price prediction and valuation system using machine learning</span></p>
-    <p><a href="https://github.com/rv2363/smart-used-car-price-prediction" target="_blank" rel="noopener">Source code on GitHub</a></p>
+    <p><a href="https://github.com/rv2363/smart-used-car-price-prediction" target="_blank" rel="noopener">Source code on GitHub</a><br><small class="footer__ver">Version {{ app_version }}</small></p>
   </div>
 </footer>
 
