@@ -258,6 +258,8 @@ button, input, select { font: inherit; color: inherit; }
 .chart .pt-label { fill: var(--ink); font-weight: 700; font-size: 12px; }
 
 /* Future */
+.assumption { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.footer__ver { opacity: .7; font-size: 12px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .chip { min-height: 40px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--white); font-weight: 700; cursor: pointer; }
 .chip[aria-selected="true"] { background: var(--violet); border-color: var(--violet); color: var(--white); }
@@ -429,6 +431,16 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 @media print {
-  .nav, .hero, #how-it-works, #compare, #tools, #about-model, .footer, .form, .results__actions { display: none !important; }
-  body { background: #fff; }
+  /* Browser "Print" of the page: results only, compact, sections kept whole.
+     The "Download valuation report (PDF)" button gives the formatted report. */
+  .nav, .hero, #how-it-works, #compare, #tools, #about-model, .footer, .form,
+  #valuate > .container > .section__title, #valuate > .container > .section__lead,
+  .results__actions, .skip-link { display: none !important; }
+  body { background: #fff; font-size: 12px; }
+  .section, .section--tint { padding: 0; background: #fff; }
+  .results { margin: 0; gap: 10px; animation: none; }
+  .results__top, .results__grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .panel { box-shadow: none; padding: 14px; break-inside: avoid; page-break-inside: avoid; }
+  .value-card { background: #fff; }
+  .value-card__price { font-size: 34px; }
 }
